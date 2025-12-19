@@ -136,6 +136,10 @@ def update_booking_status(
     if not current_user.provider or booking.provider_id != current_user.provider.id:
         raise HTTPException(status_code=403, detail="Only provider can update status")
 
+    # State rules: only pending bookings can be accepted/rejected via this endpoint.
+    if booking.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending bookings can be updated")
+
     booking.status = payload.status
     db.add(booking)
     db.commit()

@@ -33,6 +33,7 @@ export default function Services() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
+  const noServices = !loading && !error && services.length === 0;
 
   useEffect(() => {
     let active = true;
@@ -243,7 +244,12 @@ export default function Services() {
           {error}
         </div>
       )}
-      {!loading && !error && filteredServices.length === 0 && (
+      {noServices && (
+        <div className="glass rounded-xl p-10 text-center bg-primary-start/5 text-primary-start font-semibold">
+          No services available.
+        </div>
+      )}
+      {!loading && !error && !noServices && filteredServices.length === 0 && (
         <div className="glass rounded-xl p-10 text-center bg-primary-start/5 text-primary-start font-semibold">
           No services match your filters.
         </div>
@@ -256,6 +262,7 @@ export default function Services() {
             service={svc}
             onShowMap={setSelectedService}
             index={idx}
+            isLoading={loading}
           />
         ))}
       </div>
@@ -271,9 +278,7 @@ export default function Services() {
 
       {selectedService && (
         <MapModal
-          title={selectedService.title}
-          lat={Number(selectedService.lat)}
-          lon={Number(selectedService.lon)}
+          service={selectedService}
           onClose={() => setSelectedService(null)}
         />
       )}

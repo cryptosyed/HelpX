@@ -1,12 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
-from typing import List
+import logging
 from datetime import datetime, timedelta
+from typing import List
 
-from app.api.deps import get_db, get_current_provider
-from app.models import User, Provider, Booking, ProviderPayoutSettings
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, extract, text
+from sqlalchemy.orm import Session
+
 from app import schemas
+from app.api import utils as api_utils
+from app.api.deps import get_db, get_current_provider
+from app.models import User, Provider, Booking, ProviderPayoutSettings, Service
+from app.crud import create_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 earnings_router = APIRouter()
@@ -18,6 +24,191 @@ def get_provider_from_user(user: User, db: Session) -> Provider:
     if not provider:
         raise HTTPException(status_code=404, detail="Provider profile not found")
     return provider
+
+
+# ========== PROVIDER SERVICE CRUD ==========
+
+@router.post("/provider/services", response_model=schemas.ServiceOut)
+def create_provider_service(
+    svc: schemas.ServiceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_provider),
+):
+    provider = get_provider_from_user(current_user, db)
+    db_svc = create_service(db, provider_id=provider.id, svc=svc)
+    # Best-effort location update if lat/lon provided and not handled in crud
+    if svc.lat is not None and svc.lon is not None:
+        try:
+            db.execute(
+                text(
+                    "UPDATE services SET location = ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) WHERE id = :id"
+                ),
+                {"lon": svc.lon, "lat": svc.lat, "id": db_svc.id},
+            )
+            db.commit()
+        except Exception as exc:  # pragma: no cover - optional enhancement
+            logger.warning("Failed to set location for service %s: %s", db_svc.id, exc)
+    logger.info("Service created by provider %s -> service %s", provider.id, db_svc.id)
+    return api_utils.service_to_schema(db, db_svc)
+
+
+@router.get("/provider/services", response_model=List[schemas.ServiceOut])
+def list_provider_services(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_provider)
+):
+    provider = get_provider_from_user(current_user, db)
+    services = (
+        db.query(Service).filter(Service.provider_id == provider.id).order_by(Service.created_at.desc()).all()
+    )
+    return [api_utils.service_to_schema(db, svc) for svc in services]
+
+
+@router.put("/provider/services/{service_id}", response_model=schemas.ServiceOut)
+def update_provider_service(
+    service_id: int,
+    svc: schemas.ServiceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_provider),
+):
+    provider = get_provider_from_user(current_user, db)
+    db_svc = (
+        db.query(Service)
+        .filter(Service.id == service_id, Service.provider_id == provider.id)
+        .first()
+    )
+    if not db_svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    if db_svc.approved:
+        raise HTTPException(status_code=403, detail="Approved services cannot be edited")
+
+    db_svc.title = svc.title
+    db_svc.description = svc.description
+    db_svc.category = svc.category
+    db_svc.price = svc.price
+    db.add(db_svc)
+    db.commit()
+
+    if svc.lat is not None and svc.lon is not None:
+        try:
+            db.execute(
+                text(
+                    "UPDATE services SET location = ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) WHERE id = :id"
+                ),
+                {"lon": svc.lon, "lat": svc.lat, "id": db_svc.id},
+            )
+            db.commit()
+        except Exception as exc:  # pragma: no cover - optional enhancement
+            logger.warning("Failed to set location for service %s: %s", db_svc.id, exc)
+
+    return api_utils.service_to_schema(db, db_svc)
+
+
+@router.delete("/provider/services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_provider_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_provider),
+):
+    provider = get_provider_from_user(current_user, db)
+    db_svc = (
+        db.query(Service)
+        .filter(Service.id == service_id, Service.provider_id == provider.id)
+        .first()
+    )
+    if not db_svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    if db_svc.approved:
+        raise HTTPException(status_code=403, detail="Approved services cannot be deleted")
+    db.delete(db_svc)
+    db.commit()
+    return
+
+
+# ========== PROVIDER BOOKING ACTIONS ==========
+
+
+@router.get("/provider/bookings", response_model=List[schemas.BookingOut])
+def list_provider_bookings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_provider),
+):
+    provider = get_provider_from_user(current_user, db)
+    bookings = (
+        db.query(Booking)
+        .filter(Booking.provider_id == provider.id)
+        .order_by(Booking.created_at.desc())
+        .all()
+    )
+    return [api_utils.booking_to_schema(db, b) for b in bookings]
+
+
+def _get_provider_booking_or_404(db: Session, provider_id: int, booking_id: int) -> Booking:
+    booking = (
+        db.query(Booking)
+        .filter(Booking.id == booking_id, Booking.provider_id == provider_id)
+        .first()
+    )
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return booking
+
+
+def _enforce_pending(booking: Booking):
+    if booking.status != "pending":
+        raise HTTPException(status_code=400, detail="Action requires pending booking")
+
+
+def _enforce_accepted(booking: Booking):
+    if booking.status != "accepted":
+        raise HTTPException(status_code=400, detail="Action requires accepted booking")
+
+
+@router.put("/provider/bookings/{booking_id}/accept", response_model=schemas.BookingOut)
+def accept_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_provider),
+):
+    provider = get_provider_from_user(current_user, db)
+    booking = _get_provider_booking_or_404(db, provider.id, booking_id)
+    _enforce_pending(booking)
+    booking.status = "accepted"
+    db.commit()
+    db.refresh(booking)
+    logger.info("Booking %s accepted by provider %s", booking.id, provider.id)
+    return api_utils.booking_to_schema(db, booking)
+
+
+@router.put("/provider/bookings/{booking_id}/reject", response_model=schemas.BookingOut)
+def reject_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_provider),
+):
+    provider = get_provider_from_user(current_user, db)
+    booking = _get_provider_booking_or_404(db, provider.id, booking_id)
+    _enforce_pending(booking)
+    booking.status = "rejected"
+    db.commit()
+    db.refresh(booking)
+    logger.info("Booking %s rejected by provider %s", booking.id, provider.id)
+    return api_utils.booking_to_schema(db, booking)
+
+
+@router.put("/provider/bookings/{booking_id}/complete", response_model=schemas.BookingOut)
+def complete_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_provider),
+):
+    provider = get_provider_from_user(current_user, db)
+    booking = _get_provider_booking_or_404(db, provider.id, booking_id)
+    _enforce_accepted(booking)
+    booking.status = "completed"
+    db.commit()
+    db.refresh(booking)
+    logger.info("Booking %s completed by provider %s", booking.id, provider.id)
+    return api_utils.booking_to_schema(db, booking)
 
 
 # ========== EARNINGS ==========

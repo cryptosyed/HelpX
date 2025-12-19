@@ -30,6 +30,8 @@ def create_service(db: Session, provider_id: int, svc: schemas.ServiceCreate):
         category=svc.category,
         price=svc.price,
         location=point,
+        approved=False,
+        flagged=False,
     )
     db.add(db_svc)
     db.commit()

@@ -18,7 +18,7 @@ class Service(Base):
     location = Column(Geography(geometry_type="POINT", srid=4326))
     flagged = Column(Boolean, default=False)
     flag_reason = Column(Text, nullable=True)
-    approved = Column(Boolean, default=True)
+    approved = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
 
     provider = relationship("Provider", back_populates="services")

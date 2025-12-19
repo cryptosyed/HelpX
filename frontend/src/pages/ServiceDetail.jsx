@@ -233,9 +233,7 @@ export default function ServiceDetail() {
 
       {showMapModal && hasCoords && (
         <MapModal
-          lat={Number(service.lat)}
-          lon={Number(service.lon)}
-          title={service.title}
+          service={service}
           onClose={() => setShowMapModal(false)}
         />
       )}

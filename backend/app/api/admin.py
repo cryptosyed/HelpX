@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
-from typing import List, Optional
+import logging
 from datetime import datetime, timedelta
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, and_, or_
+from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_admin
 from app.models import User, Provider, Service, Booking, Report, AuditLog
 from app import schemas
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ========== USER MANAGEMENT ==========
@@ -121,6 +124,14 @@ def get_pending_providers(
     """Get all pending provider verification requests"""
     providers = db.query(Provider).filter(Provider.is_verified == False).all()
     return providers
+
+
+@router.get("/providers", response_model=List[schemas.ProviderOut])
+def list_providers_admin(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    return db.query(Provider).all()
 
 
 def _audit(db: Session, actor_id: int, action: str, target_type: str, target_id: int, metadata: dict = None):
@@ -244,8 +255,10 @@ def suspend_provider(
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
     provider.is_suspended = True
+    db.query(Service).filter(Service.provider_id == provider.id).update({"approved": False})
     db.commit()
     _audit(db, admin.id, "provider_suspended", "provider", provider_id, {"reason": reason})
+    logger.info("Provider %s suspended by admin %s", provider_id, admin.id)
     return {"message": "Provider suspended", "provider_id": provider_id}
 
 
@@ -288,6 +301,22 @@ def get_flagged_services(
     return services
 
 
+@router.get("/services", response_model=List[schemas.ServiceOut])
+def list_services_admin(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    return db.query(Service).all()
+
+
+@router.get("/services", response_model=List[schemas.ServiceOut])
+def list_services_admin(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    return db.query(Service).all()
+
+
 @router.put("/services/{service_id}/approve")
 def approve_service(
     service_id: int,
@@ -304,6 +333,7 @@ def approve_service(
     service.flag_reason = None
     db.commit()
     _audit(db, admin.id, "service_approved", "service", service_id, {})
+    logger.info("Service %s approved by admin %s", service_id, admin.id)
     return {"message": "Service approved", "service_id": service_id}
 
 
@@ -325,6 +355,7 @@ def reject_service(
         service.flag_reason = reason
     db.commit()
     _audit(db, admin.id, "service_rejected", "service", service_id, {"reason": reason})
+    logger.info("Service %s rejected by admin %s", service_id, admin.id)
     return {"message": "Service rejected", "service_id": service_id}
 
 
@@ -340,6 +371,14 @@ def list_reports(
     if status_filter:
         query = query.filter(Report.status == status_filter)
     return query.order_by(Report.created_at.desc()).all()
+
+
+@router.get("/reports/all", response_model=List[schemas.ReportOut])
+def list_reports_admin_all(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    return db.query(Report).order_by(Report.created_at.desc()).all()
 
 
 @router.put("/reports/{report_id}/resolve", response_model=schemas.ReportOut)
@@ -366,6 +405,7 @@ def resolve_report(
         report_id,
         {"status": payload.status},
     )
+    logger.info("Report %s resolved by admin %s", report_id, admin.id)
     return report
 
 

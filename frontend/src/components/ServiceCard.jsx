@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
-export default function ServiceCard({ service, onShowMap, index = 0 }) {
+export default function ServiceCard({ service, onShowMap, index = 0, isLoading = false }) {
     const cardRef = useRef(null);
 
     useEffect(() => {
@@ -39,6 +39,8 @@ export default function ServiceCard({ service, onShowMap, index = 0 }) {
     const latLabel = hasCoords ? Number(service.lat).toFixed(4) : null;
     const lonLabel = hasCoords ? Number(service.lon).toFixed(4) : null;
 
+    const disableActions = isLoading;
+
     return (
         <article
             className="relative glass rounded-2xl p-0 border border-slate-200/50 shadow-md card-hover card-tilt overflow-hidden reveal-up"
@@ -67,7 +69,9 @@ export default function ServiceCard({ service, onShowMap, index = 0 }) {
                 <footer className="flex gap-2.5 mt-auto pt-3">
                     <Link 
                         to={`/service/${service.id}`} 
-                        className="btn-gradient text-sm px-4 py-2"
+                        className={`btn-gradient text-sm px-4 py-2 ${disableActions ? "opacity-60 pointer-events-none" : ""}`}
+                        aria-disabled={disableActions}
+                        tabIndex={disableActions ? -1 : 0}
                     >
                         View
                     </Link>
@@ -75,8 +79,8 @@ export default function ServiceCard({ service, onShowMap, index = 0 }) {
                         type="button"
                         className="btn-ghost text-sm px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={() => onShowMap?.(service)}
-                        disabled={!hasCoords}
-                        aria-disabled={!hasCoords}
+                        disabled={disableActions || !hasCoords}
+                        aria-disabled={disableActions || !hasCoords}
                     >
                         Map
                     </button>

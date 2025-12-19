@@ -34,10 +34,17 @@ class Token(BaseModel):
 class ServiceCreate(BaseModel):
     title: str
     description: Optional[str]
-    category: Optional[str]
-    price: Optional[float]
+    category: str
+    price: float
     lat: Optional[float]
     lon: Optional[float]
+
+    @field_validator("price")
+    @classmethod
+    def price_positive(cls, v):
+        if v is None or v <= 0:
+            raise ValueError("price must be greater than 0")
+        return v
 
 class ServiceOut(BaseModel):
     id: int

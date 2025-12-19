@@ -108,7 +108,7 @@ def provider_services(
 
 @router.get("/{service_id}/", response_model=schemas.ServiceOut)
 def get_service(service_id: int, db: Session = Depends(get_db)):
-    svc = db.query(ServiceModel).filter(ServiceModel.id == service_id).first()
+    svc = db.query(ServiceModel).filter(ServiceModel.id == service_id, ServiceModel.approved == True).first()  # noqa: E712
     if not svc:
         raise HTTPException(status_code=404, detail="Service not found")
     return api_utils.service_to_schema(db, svc)

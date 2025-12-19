@@ -6,7 +6,7 @@ import { useAuthContext } from "../contexts/AuthContext";
  * - Redirects to /login if not authenticated
  * - Redirects to / if role is not permitted
  */
-export function ProtectedRoute({ children, allowedRoles = [] }) {
+export function ProtectedRoute({ children, allowedRoles = [], requireAdmin = false }) {
   const auth = useAuthContext();
   const normalizeRole = (role) => {
     const r = (role || "").toLowerCase();
@@ -29,7 +29,11 @@ export function ProtectedRoute({ children, allowedRoles = [] }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles.length > 0 && !allowedNormalized.includes(currentRole)) {
+  if (requireAdmin && currentRole !== "admin") {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!requireAdmin && allowedRoles.length > 0 && !allowedNormalized.includes(currentRole)) {
     return <Navigate to="/" replace />;
   }
 

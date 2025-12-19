@@ -1,0 +1,116 @@
+import React, { useEffect, useState } from "react";
+import API from "../api";
+
+export default function Dashboard(){
+  const [svcs, setSvcs] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ title: "", description: "", category: "", price: "", lat: "", lon: "" });
+
+  async function load(){
+    try{
+      const res = await API.get("/provider/");
+      setSvcs(res.data);
+    }catch(e){
+      console.error(e);
+      alert("Failed to load provider services (are you logged in?)");
+    }
+  }
+
+  useEffect(()=>{ load(); }, []);
+
+  function startEdit(s){
+    setEditing(s.id);
+    setForm({
+      title: s.title || "",
+      description: s.description || "",
+      category: s.category || "",
+      price: s.price ?? "",
+      lat: s.lat ?? "",
+      lon: s.lon ?? ""
+    });
+  }
+
+  function cancelEdit(){
+    setEditing(null);
+    setForm({ title: "", description: "", category: "", price: "", lat: "", lon: ""});
+  }
+
+  async function saveEdit(id){
+    try{
+      const payload = {
+        title: form.title,
+        description: form.description,
+        category: form.category,
+        price: form.price ? Number(form.price) : null,
+        lat: form.lat !== "" ? Number(form.lat) : null,
+        lon: form.lon !== "" ? Number(form.lon) : null
+      };
+      const res = await API.put(`/services/${id}/`, payload);
+      alert("Updated");
+      setEditing(null);
+      load();
+    }catch(e){
+      console.error(e);
+      alert("Update failed");
+    }
+  }
+
+  async function deleteSvc(id){
+    if(!confirm("Delete this service?")) return;
+    try{
+      await API.delete(`/services/${id}/`);
+      alert("Deleted");
+      load();
+    }catch(e){
+      console.error(e);
+      alert("Delete failed");
+    }
+  }
+
+  return (
+    <div>
+      <h3>Provider Dashboard — My Services</h3>
+      {svcs.length === 0 && <p>No services found (make sure you're logged in).</p>}
+      <ul style={{ listStyle: "none", padding: 0 }}>
+        {svcs.map(s => (
+          <li key={s.id} style={{ marginBottom: 14, border: "1px solid #e6eefc", padding: 12, borderRadius: 8, background: "#fff" }}>
+            {editing === s.id ? (
+              <div>
+                <div style={{ marginBottom: 8 }}>
+                  <input style={{ width: "100%", padding:8 }} value={form.title} onChange={e=>setForm({...form, title:e.target.value})} />
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <textarea style={{ width: "100%", padding:8 }} rows={3} value={form.description} onChange={e=>setForm({...form, description:e.target.value})} />
+                </div>
+                <div style={{ display: "flex", gap:8, marginBottom:8 }}>
+                  <input placeholder="category" style={{ flex:1, padding:8 }} value={form.category} onChange={e=>setForm({...form, category:e.target.value})} />
+                  <input placeholder="price" style={{ width:120, padding:8 }} value={form.price} onChange={e=>setForm({...form, price:e.target.value})} />
+                </div>
+                <div style={{ display: "flex", gap:8, marginBottom:8 }}>
+                  <input placeholder="lat" style={{ flex:1, padding:8 }} value={form.lat} onChange={e=>setForm({...form, lat:e.target.value})} />
+                  <input placeholder="lon" style={{ flex:1, padding:8 }} value={form.lon} onChange={e=>setForm({...form, lon:e.target.value})} />
+                </div>
+                <div style={{ display: "flex", gap:8 }}>
+                  <button onClick={()=>saveEdit(s.id)} style={{ padding:"8px 10px" }}>Save</button>
+                  <button onClick={cancelEdit} style={{ padding:"8px 10px" }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ fontWeight:600 }}>{s.title}</div>
+                  <div style={{ fontSize:13 }}>{s.category} — ₹{s.price ?? "—"}</div>
+                  <div style={{ fontSize:12, color:"#666" }}>Lat: {s.lat ?? "n/a"} Lon: {s.lon ?? "n/a"}</div>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={()=>startEdit(s)} style={{ padding:"6px 8px" }}>Edit</button>
+                  <button onClick={()=>deleteSvc(s.id)} style={{ padding:"6px 8px", background:"#ff6b6b", color:"#fff", border:"none", borderRadius:6 }}>Delete</button>
+                </div>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

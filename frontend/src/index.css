@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom utilities */
+.text-gradient {
+  background: linear-gradient(135deg, #6C63FF 0%, #4C6EF5 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Ensure buttons never inherit text-gradient transparent styles */
+button.btn-gradient,
+a.btn-gradient,
+button.btn-ghost,
+a.btn-ghost {
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.card-hover {
+  transition: all 0.3s ease-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-8px) scale(1.01);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.btn-gradient,
+button.btn-gradient,
+a.btn-gradient {
+  background: linear-gradient(135deg, #6C63FF 0%, #4C6EF5 100%) !important;
+  background-clip: border-box !important;
+  -webkit-background-clip: border-box !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  font-weight: 600 !important;
+  padding: 0.625rem 1.25rem !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.2s !important;
+  border: none !important;
+  cursor: pointer !important;
+  display: inline-block !important;
+  text-align: center !important;
+  text-decoration: none !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+
+.btn-gradient *,
+button.btn-gradient *,
+a.btn-gradient * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.btn-gradient:hover,
+button.btn-gradient:hover,
+a.btn-gradient:hover {
+  box-shadow: 0 0 24px rgba(108, 99, 255, 0.3) !important;
+  transform: scale(1.05) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.btn-gradient:hover *,
+button.btn-gradient:hover *,
+a.btn-gradient:hover * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.btn-gradient:active,
+button.btn-gradient:active,
+a.btn-gradient:active {
+  transform: scale(0.95) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.btn-gradient:active *,
+button.btn-gradient:active *,
+a.btn-gradient:active * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.btn-gradient:focus,
+button.btn-gradient:focus,
+a.btn-gradient:focus {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  outline: none !important;
+}
+
+.btn-gradient:focus *,
+button.btn-gradient:focus *,
+a.btn-gradient:focus * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.btn-ghost {
+  background: transparent !important;
+  border: 2px solid rgba(108, 99, 255, 0.2) !important;
+  color: #6C63FF !important;
+  -webkit-text-fill-color: #6C63FF !important;
+  font-weight: 600 !important;
+  padding: 0.625rem 1.25rem !important;
+  border-radius: 0.5rem !important;
+  transition: all 0.2s !important;
+  cursor: pointer !important;
+  display: inline-block !important;
+  text-align: center !important;
+  text-decoration: none !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+
+.btn-ghost:hover {
+  background: rgba(108, 99, 255, 0.1) !important;
+  border-color: #6C63FF !important;
+  color: #6C63FF !important;
+  -webkit-text-fill-color: #6C63FF !important;
+}
+
+.btn-ghost:focus {
+  color: #6C63FF !important;
+  -webkit-text-fill-color: #6C63FF !important;
+  outline: none !important;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

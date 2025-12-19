@@ -1,0 +1,25 @@
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from geoalchemy2 import Geography
+
+from app.db.base import Base
+
+
+class Service(Base):
+    __tablename__ = "services"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text)
+    category = Column(String, index=True)
+    price = Column(Numeric)
+    location = Column(Geography(geometry_type="POINT", srid=4326))
+    flagged = Column(Boolean, default=False)
+    flag_reason = Column(Text, nullable=True)
+    approved = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    provider = relationship("Provider", back_populates="services")
+

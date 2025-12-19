@@ -1,0 +1,75 @@
+/* Custom animations and effects that require complex keyframes */
+
+/* Scroll reveal animation */
+.reveal-up {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.reveal-up.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Card tilt effect on hover */
+.card-tilt {
+  transition: transform 0.3s ease-out, box-shadow 0.3s ease-out;
+}
+
+.card-tilt:hover {
+  transform: translateY(-8px) rotateX(2deg) rotateY(-1deg);
+  box-shadow: 0 20px 40px rgba(108, 99, 255, 0.15);
+}
+
+/* Gradient accent line */
+.gradient-accent-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #6C63FF, #4C6EF5);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.card-hover:hover .gradient-accent-line {
+  opacity: 1;
+}
+
+/* Parallax container */
+.parallax-slow {
+  transition: transform 0.3s ease-out;
+}
+
+.parallax-fast {
+  transition: transform 0.5s ease-out;
+}
+
+/* Smooth page transitions */
+.page-transition {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Leaflet map container fixes */
+.leaflet-container {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.leaflet-container .leaflet-control {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+

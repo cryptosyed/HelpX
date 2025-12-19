@@ -1,0 +1,34 @@
+version: "3.8"
+services:
+  db:
+    image: postgis/postgis:15-3.4
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: helpx
+      POSTGRES_PASSWORD: helpxpass
+      POSTGRES_DB: helpxdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "helpx"]
+      interval: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://helpx:helpxpass@db:5432/helpxdb
+      SECRET_KEY: change-this-secret
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

@@ -38,6 +38,7 @@ class ServiceCreate(BaseModel):
     price: float
     lat: Optional[float]
     lon: Optional[float]
+    image_url: Optional[str] = "/images/service-placeholder.jpg"
 
     @field_validator("price")
     @classmethod
@@ -55,6 +56,7 @@ class ServiceOut(BaseModel):
     price: Optional[float]
     lat: Optional[float]
     lon: Optional[float]
+    image_url: Optional[str] = "/images/service-placeholder.jpg"
     flagged: Optional[bool] = False
     flag_reason: Optional[str] = None
     approved: Optional[bool] = True
@@ -237,6 +239,20 @@ class ProviderMatchResponse(BaseModel):
     debug: Optional[MatchDebug] = None
 
 
+class AdminProviderOut(BaseModel):
+    id: int
+    name: str
+    email: str
+    approved: Optional[bool] = None
+    avg_rating: Optional[float] = None
+    total_reviews: int
+
+
+class AdminProviderStatusOut(BaseModel):
+    provider_id: int
+    approved: bool
+
+
 class AdminAnalytics(BaseModel):
     total_users: int
     total_providers: int
@@ -284,3 +300,11 @@ class TrustScoreOut(BaseModel):
     reports_penalty: float
     total_bookings: int
     reports_count: int
+
+
+class ProviderRatingSummary(BaseModel):
+    provider_id: int
+    avg_rating: Optional[float] = None
+    total_reviews: int
+
+

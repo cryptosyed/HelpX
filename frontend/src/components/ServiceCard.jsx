@@ -43,18 +43,24 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
 
     return (
         <article
-            className="relative glass rounded-2xl p-0 border border-slate-200/50 shadow-md card-hover card-tilt overflow-hidden reveal-up"
+            className="service-card relative glass rounded-2xl p-0 border border-slate-200/50 shadow-md overflow-hidden reveal-up flex flex-col"
             ref={cardRef}
             style={{ animationDelay: `${index * 60}ms`, '--delay': `${index * 60}ms` }}
             aria-label={service.title}
         >
             <div className="gradient-accent-line"></div>
-            <div className="p-5 flex flex-col gap-3 min-h-[240px]">
-                <h2 className="text-xl font-bold text-slate-800 m-0">{service.title}</h2>
-                <p className="text-sm font-medium text-slate-500 m-0">
-                    {service.category || "General"} • {priceLabel}
-                </p>
-                <p className="text-sm text-slate-700 leading-relaxed flex-1 m-0">
+            <div className="p-5 pb-6 flex-1 flex flex-col gap-3 min-h-[240px]">
+                <div className="service-image-placeholder flex items-center justify-center">
+                    <span className="text-2xl opacity-20">🧹</span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-[1.05rem] font-semibold text-[#111827] m-0">{service.title}</h2>
+                    <span className="inline-flex items-center px-[10px] py-[4px] rounded-full text-[0.75rem] font-medium bg-[#eef2ff] text-[#4338ca]">
+                        {service.category || "General"}
+                    </span>
+                </div>
+                <div className="text-[1.25rem] font-bold text-[#6366f1] leading-none">{priceLabel}</div>
+                <p className="text-[0.9rem] text-[#6b7280] leading-[1.5] flex-1 m-0">
                     {service.description || "No description."}
                 </p>
 
@@ -66,7 +72,7 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
                     )}
                 </div>
 
-                <footer className="flex gap-2.5 mt-auto pt-3">
+                <footer className="flex gap-2.5 mt-auto pt-2.5">
                     <Link 
                         to={`/service/${service.id}`} 
                         className={`btn-gradient text-sm px-4 py-2 ${disableActions ? "opacity-60 pointer-events-none" : ""}`}

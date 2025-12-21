@@ -92,30 +92,30 @@ function Nav() {
             </button>
           ) : (
             <>
-            <NavLink
-              to="/login"
-              className={({ isActive }) =>
-                `px-4 py-2 h-10 rounded-lg font-medium text-sm transition-colors duration-150
+              <NavLink
+                to="/login"
+                className={({ isActive }) =>
+                  `px-4 py-2 h-10 rounded-lg font-medium text-sm transition-colors duration-150
                 border border-slate-200 bg-white text-slate-800 shadow-sm
                 hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-start
                 ${isActive ? "ring-1 ring-primary-start/50" : ""}`
-              }
-            >
-              Login
-            </NavLink>
-            <NavLink
-              to="/register"
-              className={({ isActive }) =>
-                `px-4 py-2 h-10 rounded-lg font-semibold text-sm transition-colors duration-150
+                }
+              >
+                Login
+              </NavLink>
+              <NavLink
+                to="/register"
+                className={({ isActive }) =>
+                  `px-4 py-2 h-10 rounded-lg font-semibold text-sm transition-colors duration-150
                 bg-indigo-600 text-white shadow-sm
                 hover:bg-indigo-500 active:bg-indigo-700
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-400
                 ${isActive ? "ring-2 ring-offset-2 ring-indigo-400" : ""}`
-              }
-            >
-              Register
-            </NavLink>
+                }
+              >
+                Register
+              </NavLink>
             </>
           )}
         </nav>

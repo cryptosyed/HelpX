@@ -7,6 +7,7 @@ from .address import Address
 from .provider_payout_settings import ProviderPayoutSettings
 from .report import Report
 from .audit_log import AuditLog
+from .review import Review
 
 __all__ = [
     "Base",
@@ -18,5 +19,6 @@ __all__ = [
     "ProviderPayoutSettings",
     "Report",
     "AuditLog",
+    "Review",
 ]
 

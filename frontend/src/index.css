@@ -162,6 +162,58 @@ a.btn-gradient:focus * {
   outline: none !important;
 }
 
+/* Services layout safety */
+.services-page {
+  padding: 32px;
+}
+
+.services-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 24px;
+  align-items: start;
+}
+
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+
+.services-map {
+  position: sticky;
+  top: 96px;
+  height: 420px;
+}
+
+.service-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 380px;
+  border: 1px solid #f1f5f9;
+  background: #ffffff;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.service-card:hover {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.07);
+  border-color: #e2e8f0;
+  cursor: pointer;
+}
+
+.service-image-placeholder {
+  height: 160px;
+  width: 100%;
+  background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
 

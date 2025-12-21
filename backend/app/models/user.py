@@ -22,4 +22,5 @@ class User(Base):
     provider = relationship("Provider", back_populates="user", uselist=False)
     addresses = relationship("Address", back_populates="user")
     bookings = relationship("Booking", back_populates="user")
+    reviews = relationship("Review", back_populates="user")
 

@@ -137,6 +137,7 @@ def update_service(
     s.description = svc.description
     s.category = svc.category
     s.price = svc.price
+    s.image_url = svc.image_url or s.image_url or "/images/service-placeholder.jpg"
 
     db.add(s)
     db.commit()

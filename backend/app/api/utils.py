@@ -30,6 +30,7 @@ def service_to_schema(db: Session, service: ServiceModel) -> schemas.ServiceOut:
         price=float(service.price) if service.price is not None else None,
         lat=lat_val,
         lon=lon_val,
+        image_url=getattr(service, "image_url", None) or "/images/service-placeholder.jpg",
         flagged=getattr(service, 'flagged', False),
         flag_reason=getattr(service, 'flag_reason', None),
         approved=getattr(service, 'approved', True),

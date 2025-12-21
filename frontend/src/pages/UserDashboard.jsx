@@ -60,10 +60,8 @@ export default function UserDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [bookingsRes, addressesRes, profileRes] = await Promise.all([
+      const [bookingsRes] = await Promise.all([
         API.get("/bookings/user"),
-        API.get("/user/addresses"),
-        API.get("/user/profile"),
       ]);
 
       const now = new Date();
@@ -86,9 +84,10 @@ export default function UserDashboard() {
 
       setUpcomingBookings(upcoming);
       setPastBookings(past);
-      setAddresses(addressesRes.data || []);
-      setProfile(profileRes.data);
-      setProfileForm({ name: profileRes.data?.name || "" });
+      // Addresses/profile endpoints removed; keep state stable
+      setAddresses([]);
+      setProfile(null);
+      setProfileForm({ name: "" });
     } catch (err) {
       console.error(err);
       setError("Failed to load dashboard data");

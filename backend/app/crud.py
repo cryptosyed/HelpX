@@ -23,6 +23,7 @@ def create_service(db: Session, provider_id: int, svc: schemas.ServiceCreate):
     point = None
     if svc.lon is not None and svc.lat is not None:
         point = from_shape(Point(svc.lon, svc.lat), srid=4326)
+    image_url = svc.image_url or "/images/service-placeholder.jpg"
     db_svc = Service(
         provider_id=provider_id,
         title=svc.title,
@@ -30,6 +31,7 @@ def create_service(db: Session, provider_id: int, svc: schemas.ServiceCreate):
         category=svc.category,
         price=svc.price,
         location=point,
+        image_url=image_url,
         approved=False,
         flagged=False,
     )

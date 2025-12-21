@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.api import utils as api_utils
 from app.api.deps import get_db, get_current_provider
-from app.models import User, Provider, Booking, ProviderPayoutSettings, Service
+from app.models import User, Provider, Booking, ProviderPayoutSettings, Service, Review
 from app.crud import create_service
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,7 @@ def update_provider_service(
     db_svc.description = svc.description
     db_svc.category = svc.category
     db_svc.price = svc.price
+    db_svc.image_url = svc.image_url or db_svc.image_url or "/images/service-placeholder.jpg"
     db.add(db_svc)
     db.commit()
 
@@ -122,6 +123,38 @@ def delete_provider_service(
     db.delete(db_svc)
     db.commit()
     return
+
+
+# ========== PROVIDER RATING SUMMARY ==========
+
+
+@router.get("/providers/{provider_id}/rating-summary", response_model=schemas.ProviderRatingSummary)
+def get_provider_rating_summary(provider_id: int, db: Session = Depends(get_db)):
+    # Ensure provider exists
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    agg = (
+        db.query(
+            func.count(Review.id).label("total_reviews"),
+            func.avg(Review.rating).label("avg_rating"),
+        )
+        .join(Service, Service.id == Review.service_id)
+        .filter(Service.provider_id == provider_id)
+        .one_or_none()
+    )
+
+    total_reviews = agg.total_reviews if agg else 0
+    avg_rating = None
+    if agg and agg.total_reviews:
+        avg_rating = round(float(agg.avg_rating), 1) if agg.avg_rating is not None else None
+
+    return schemas.ProviderRatingSummary(
+        provider_id=provider_id,
+        avg_rating=avg_rating,
+        total_reviews=total_reviews,
+    )
 
 
 # ========== PROVIDER BOOKING ACTIONS ==========

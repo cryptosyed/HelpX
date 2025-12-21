@@ -15,6 +15,7 @@ class Service(Base):
     description = Column(Text)
     category = Column(String, index=True)
     price = Column(Numeric)
+    image_url = Column(String, nullable=True, default="/images/service-placeholder.jpg")
     location = Column(Geography(geometry_type="POINT", srid=4326))
     flagged = Column(Boolean, default=False)
     flag_reason = Column(Text, nullable=True)
@@ -22,4 +23,5 @@ class Service(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     provider = relationship("Provider", back_populates="services")
+    reviews = relationship("Review", back_populates="service")
 

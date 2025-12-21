@@ -21,4 +21,5 @@ class Booking(Base):
     service = relationship("Service")
     user = relationship("User")
     provider = relationship("Provider")
+    review = relationship("Review", back_populates="booking", uselist=False)
 

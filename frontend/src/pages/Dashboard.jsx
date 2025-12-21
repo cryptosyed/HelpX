@@ -49,6 +49,8 @@ export default function Dashboard() {
     total_bookings: 0,
     monthly: [],
   });
+  const [providerId, setProviderId] = useState(null);
+  const [ratingSummary, setRatingSummary] = useState(null);
   const [calendar, setCalendar] = useState([]);
   const [payoutSettings, setPayoutSettings] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -101,6 +103,19 @@ export default function Dashboard() {
           bank_acc_no: payoutRes.data.bank_acc_no || "",
           bank_ifsc: payoutRes.data.bank_ifsc || "",
         });
+      }
+
+      // Derive provider ID (from services first, fallback to bookings) to fetch rating summary
+      const derivedProviderId =
+        (svcRes.data && svcRes.data.length > 0 && svcRes.data[0].provider_id) ||
+        (bookingRes.data && bookingRes.data.length > 0 && bookingRes.data[0].provider_id) ||
+        null;
+      setProviderId(derivedProviderId);
+
+      if (derivedProviderId) {
+        loadRatingSummary(derivedProviderId);
+      } else {
+        setRatingSummary(null);
       }
     } catch (err) {
       console.error(err);
@@ -192,6 +207,16 @@ export default function Dashboard() {
     }
   }
 
+  async function loadRatingSummary(pid) {
+    try {
+      const res = await API.get(`/providers/${pid}/rating-summary`);
+      setRatingSummary(res.data || null);
+    } catch (err) {
+      console.error("Failed to load rating summary", err);
+      setRatingSummary(null);
+    }
+  }
+
   const stats = useMemo(() => {
     const total = services.length;
     const avgPrice =
@@ -252,6 +277,21 @@ export default function Dashboard() {
           </button>
         }
       />
+
+      {isProvider && (
+        <div className="mb-4 text-slate-700">
+          {ratingSummary && ratingSummary.avg_rating != null ? (
+            <div className="flex items-baseline gap-2">
+              <span className="text-lg leading-none">⭐ {Number(ratingSummary.avg_rating).toFixed(1)}</span>
+              <span className="text-sm text-slate-500">
+                ({ratingSummary.total_reviews} jobs completed)
+              </span>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500">No ratings yet</div>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 border-b border-slate-200">

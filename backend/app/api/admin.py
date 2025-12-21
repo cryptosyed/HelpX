@@ -7,7 +7,7 @@ from sqlalchemy import func, and_, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_admin
-from app.models import User, Provider, Service, Booking, Report, AuditLog
+from app.models import User, Provider, Service, Booking, Report, AuditLog, Review
 from app import schemas
 
 router = APIRouter()
@@ -126,12 +126,303 @@ def get_pending_providers(
     return providers
 
 
-@router.get("/providers", response_model=List[schemas.ProviderOut])
+@router.get("/providers", response_model=List[schemas.AdminProviderOut])
 def list_providers_admin(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    return db.query(Provider).all()
+    logger.info("Admin providers list requested by admin_id=%s", admin.id)
+    review_agg_subq = (
+        db.query(
+            Service.provider_id.label("pid"),
+            func.avg(Review.rating).label("avg_rating"),
+            func.count(Review.id).label("total_reviews"),
+        )
+        .outerjoin(Review, Review.service_id == Service.id)
+        .group_by(Service.provider_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            Provider.id.label("provider_id"),
+            User.name.label("name"),
+            User.email.label("email"),
+            Provider.is_verified.label("approved"),
+            review_agg_subq.c.avg_rating,
+            review_agg_subq.c.total_reviews,
+        )
+        .join(User, Provider.user_id == User.id)
+        .outerjoin(review_agg_subq, review_agg_subq.c.pid == Provider.id)
+        .all()
+    )
+
+    result = []
+    for r in rows:
+        avg_rating_val = (
+            float(r.avg_rating) if r.avg_rating is not None else None
+        )
+        total_reviews_val = int(r.total_reviews or 0) if r.total_reviews is not None else 0
+        approved_raw = getattr(r, "approved", None)
+        approved_val = approved_raw if approved_raw is not None else None
+        result.append(
+            {
+                "id": r.provider_id,
+                "name": r.name,
+                "email": r.email,
+                "approved": approved_val,
+                "avg_rating": avg_rating_val,
+                "total_reviews": total_reviews_val,
+            }
+        )
+
+    return result
+
+
+@router.patch("/providers/{provider_id}/status", response_model=schemas.AdminProviderStatusOut)
+def update_provider_status(
+    provider_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    approved = payload.get("approved")
+    if approved is None:
+        raise HTTPException(status_code=400, detail="approved is required")
+
+    provider.is_verified = bool(approved)
+    db.commit()
+    db.refresh(provider)
+
+    return {
+        "provider_id": provider.id,
+        "approved": provider.is_verified,
+    }
+
+
+# TODO: Dev-only helper; remove before production
+@router.post("/providers/{provider_id}/reset-to-pending")
+def reset_provider_to_pending(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    provider.is_verified = None
+    db.commit()
+    db.refresh(provider)
+
+    return {"provider_id": provider.id, "approved": provider.is_verified}
+
+
+@router.post("/providers/{provider_id}/reset")
+def reset_provider_status(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    provider.is_verified = None
+    db.commit()
+    db.refresh(provider)
+
+    logger.info("Provider %s reset to pending", provider.id)
+    return {"id": provider.id, "approved": provider.is_verified}
+
+
+@router.get("/providers/{provider_id}/profile")
+def get_provider_profile(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    provider = (
+        db.query(Provider, User)
+        .join(User, Provider.user_id == User.id)
+        .filter(Provider.id == provider_id)
+        .first()
+    )
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    provider_obj, user_obj = provider
+    services = db.query(Service).filter(Service.provider_id == provider_id).all()
+    services_out = [
+        {
+            "id": s.id,
+            "title": s.title,
+            "category": s.category,
+            "price": float(s.price) if s.price is not None else None,
+            "approved": s.approved,
+        }
+        for s in services
+    ]
+
+    return {
+        "id": provider_obj.id,
+        "name": user_obj.name,
+        "email": user_obj.email,
+        "approved": provider_obj.is_verified if provider_obj.is_verified is not None else None,
+        "bio": provider_obj.bio,
+        "services": services_out,
+    }
+
+@router.get("/providers/{provider_id}")
+def get_provider_detail(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    provider = (
+        db.query(Provider, User)
+        .join(User, Provider.user_id == User.id)
+        .filter(Provider.id == provider_id)
+        .first()
+    )
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    provider_obj, user_obj = provider
+    services = (
+        db.query(Service)
+        .filter(Service.provider_id == provider_id)
+        .all()
+    )
+    services_out = [
+        {
+            "id": s.id,
+            "title": s.title,
+            "category": s.category,
+            "price": float(s.price) if s.price is not None else None,
+            "approved": s.approved,
+        }
+        for s in services
+    ]
+
+    return {
+        "id": provider_obj.id,
+        "name": user_obj.name,
+        "email": user_obj.email,
+        "bio": provider_obj.bio,
+        "approved": provider_obj.is_verified if provider_obj.is_verified is not None else None,
+        "services": services_out,
+    }
+
+
+@router.put("/services/{service_id}/activate")
+def activate_service_admin(
+    service_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    svc = db.query(Service).filter(Service.id == service_id).first()
+    if not svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    svc.approved = True
+    db.commit()
+    db.refresh(svc)
+    return {
+        "id": svc.id,
+        "title": svc.title,
+        "category": svc.category,
+        "price": float(svc.price) if svc.price is not None else None,
+        "is_active": bool(svc.approved),
+    }
+
+
+@router.put("/services/{service_id}/deactivate")
+def deactivate_service_admin(
+    service_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    svc = db.query(Service).filter(Service.id == service_id).first()
+    if not svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    svc.approved = False
+    db.commit()
+    db.refresh(svc)
+    return {
+        "id": svc.id,
+        "title": svc.title,
+        "category": svc.category,
+        "price": float(svc.price) if svc.price is not None else None,
+        "is_active": bool(svc.approved),
+    }
+
+
+@router.put("/services/{service_id}/activate")
+def activate_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    svc = db.query(Service).filter(Service.id == service_id).first()
+    if not svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    svc.approved = True
+    db.commit()
+    db.refresh(svc)
+    return {
+        "id": svc.id,
+        "title": svc.title,
+        "price": float(svc.price) if svc.price is not None else None,
+        "category": svc.category,
+        "is_active": bool(svc.approved),
+    }
+
+
+@router.put("/services/{service_id}/deactivate")
+def deactivate_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    svc = db.query(Service).filter(Service.id == service_id).first()
+    if not svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    svc.approved = False
+    db.commit()
+    db.refresh(svc)
+    return {
+        "id": svc.id,
+        "title": svc.title,
+        "price": float(svc.price) if svc.price is not None else None,
+        "category": svc.category,
+        "is_active": bool(svc.approved),
+    }
+
+
+# ========== ADMIN STATS ==========
+
+
+@router.get("/stats")
+def admin_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Aggregate stats for admin dashboard."""
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    total_providers = db.query(func.count(User.id)).filter(User.role == "provider").scalar() or 0
+    active_bookings = db.query(func.count(Booking.id)).filter(Booking.status == "active").scalar() or 0
+    pending_reports = db.query(func.count(Report.id)).filter(Report.status == "pending").scalar() or 0
+
+    return {
+        "total_users": int(total_users),
+        "total_providers": int(total_providers),
+        "active_bookings": int(active_bookings),
+        "pending_reports": int(pending_reports),
+    }
 
 
 def _audit(db: Session, actor_id: int, action: str, target_type: str, target_id: int, metadata: dict = None):

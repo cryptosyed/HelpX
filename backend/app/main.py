@@ -1,6 +1,7 @@
 import logging
 logging.basicConfig(level=logging.INFO)
 
+from fastapi.security import HTTPBearer
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,7 +10,10 @@ from app.api.provider import earnings_router
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="HelpX MVP API")
+app = FastAPI(
+    title="HelpX MVP API",
+    swagger_ui_parameters={"persistAuthorization": True}
+)
 
 
 @app.on_event("startup")

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
 import { useAuthContext } from "../contexts/AuthContext";
+import MapPickerModal from "./MapPickerModal";
 
 export default function BookingForm({ service, serviceId, onCreated }) {
   const auth = useAuthContext();
@@ -11,6 +12,7 @@ export default function BookingForm({ service, serviceId, onCreated }) {
   const [message, setMessage] = useState(null);
   const [isOwnService, setIsOwnService] = useState(false);
   const [locationError, setLocationError] = useState(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   useEffect(() => {
     async function resolveOwnership() {
@@ -118,6 +120,17 @@ export default function BookingForm({ service, serviceId, onCreated }) {
 
       <div className="space-y-3 border border-slate-200 rounded-lg p-3 bg-white">
         <div className="text-sm font-semibold text-slate-700">Job location (required)</div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn-ghost text-sm"
+            onClick={() => setShowMapPicker(true)}
+            disabled={disableSubmit}
+          >
+            📍 Choose location on map
+          </button>
+          <span className="text-xs text-slate-600 self-center">Map view coming soon for routing.</span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Latitude</label>
@@ -184,6 +197,16 @@ export default function BookingForm({ service, serviceId, onCreated }) {
         <div className="text-sm text-slate-600 text-center">
           You need to log in before sending booking requests.
         </div>
+      )}
+
+      {showMapPicker && (
+        <MapPickerModal
+          isOpen={showMapPicker}
+          onClose={() => setShowMapPicker(false)}
+          onConfirm={({ lat, lon }) => setForm((prev) => ({ ...prev, lat, lon }))}
+          initialLat={form.lat || service?.lat}
+          initialLon={form.lon || service?.lon}
+        />
       )}
     </form>
   );

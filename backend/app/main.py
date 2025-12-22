@@ -5,15 +5,29 @@ from fastapi.security import HTTPBearer
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, bookings, services, admin, user, provider, match, reports
+from app.api import auth, bookings, services, admin, user, provider, match, reports, reviews
 from app.api.provider import earnings_router
 
 logger = logging.getLogger(__name__)
+
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 app = FastAPI(
     title="HelpX MVP API",
     swagger_ui_parameters={"persistAuthorization": True}
 )
+
+def add_cors(app: FastAPI) -> None:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.on_event("startup")
@@ -34,17 +48,8 @@ def startup_log() -> None:
         logger.warning("Database not available at startup: %s", exc)
 
 
-# CORS (ok for dev)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS (dev)
+add_cors(app)
 
 # Routers
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -56,6 +61,7 @@ app.include_router(provider.router, prefix="/provider", tags=["provider"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(earnings_router, tags=["provider"])
 app.include_router(match.router, tags=["matching"])
+app.include_router(reviews.router, tags=["reviews"])
 
 
 @app.get("/")

@@ -60,9 +60,10 @@ export default function UserDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [bookingsRes] = await Promise.all([
-        API.get("/bookings/user"),
-      ]);
+      const bookingsRes = await API.get("/bookings/user").catch((err) => {
+        console.warn("Bookings load failed", err);
+        return { data: [] };
+      });
 
       const now = new Date();
       const bookings = bookingsRes.data || [];
@@ -116,45 +117,17 @@ export default function UserDashboard() {
   }
 
   async function createAddress() {
-    try {
-      await API.post("/user/addresses", addressForm);
-      setShowAddressModal(false);
-      setAddressForm({
-        label: "",
-        line1: "",
-        line2: "",
-        city: "",
-        pincode: "",
-        lat: "",
-        lon: "",
-      });
-      loadData();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create address");
-    }
+    // noop: endpoint removed; keep UI stable without throwing
+    setShowAddressModal(false);
   }
 
   async function deleteAddress(id) {
-    if (!window.confirm("Delete this address?")) return;
-    try {
-      await API.delete(`/user/addresses/${id}`);
-      loadData();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to delete address");
-    }
+    // noop for removed endpoint
   }
 
   async function updateProfile() {
-    try {
-      await API.put("/user/profile", profileForm);
-      setShowProfileModal(false);
-      loadData();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update profile");
-    }
+    // noop for removed endpoint
+    setShowProfileModal(false);
   }
 
   if (loading) {

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
-export default function ServiceCard({ service, onShowMap, index = 0, isLoading = false }) {
+export default function ServiceCard({ service, onShowMap, index = 0, isLoading = false, avg_rating, total_reviews }) {
     const cardRef = useRef(null);
 
     useEffect(() => {
@@ -59,7 +59,18 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
                         {service.category || "General"}
                     </span>
                 </div>
-                <div className="text-[1.25rem] font-bold text-[#6366f1] leading-none">{priceLabel}</div>
+                <div className="flex items-baseline gap-2">
+                    <div className="text-[1.25rem] font-bold text-[#6366f1] leading-none">{priceLabel}</div>
+                    {avg_rating !== undefined || total_reviews !== undefined ? (
+                        <div className="text-xs text-slate-600 flex items-center gap-1">
+                            <span className="text-amber-500">★</span>
+                            <span className="font-semibold">
+                                {avg_rating != null ? Number(avg_rating).toFixed(1) : "—"}
+                            </span>
+                            <span className="text-slate-500">({total_reviews ?? 0})</span>
+                        </div>
+                    ) : null}
+                </div>
                 <p className="text-[0.9rem] text-[#6b7280] leading-[1.5] flex-1 m-0">
                     {service.description || "No description."}
                 </p>
@@ -73,8 +84,8 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
                 </div>
 
                 <footer className="flex gap-2.5 mt-auto pt-2.5">
-                    <Link 
-                        to={`/service/${service.id}`} 
+                    <Link
+                        to={`/service/${service.id}`}
                         className={`btn-gradient text-sm px-4 py-2 ${disableActions ? "opacity-60 pointer-events-none" : ""}`}
                         aria-disabled={disableActions}
                         tabIndex={disableActions ? -1 : 0}

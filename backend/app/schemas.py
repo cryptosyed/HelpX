@@ -104,6 +104,9 @@ class BookingOut(BaseModel):
     status: str
     service: Optional[ServiceOut]
     created_at: Optional[str]
+    service_title: Optional[str] = None
+    user_name: Optional[str] = None
+    location: Optional[str] = None
 
     class Config:
         from_attributes = True

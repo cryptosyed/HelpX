@@ -5,6 +5,7 @@ import ServiceCard from "../components/ServiceCard";
 import Pagination from "../components/Pagination";
 import MapModal from "../components/MapModal";
 import Hero from "../components/Hero";
+import { useAuth } from "../hooks/useAuth";
 
 const PAGE_SIZE = 6;
 const CATEGORY_OPTIONS = [
@@ -16,6 +17,9 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function Services() {
+  const { user, role } = useAuth();
+  const normalizedRole = (role || user?.role || "").toLowerCase();
+  const isProvider = normalizedRole === "provider";
   const [services, setServices] = useState([]);
   const [meta, setMeta] = useState({ total: 0, page: 1, page_size: PAGE_SIZE });
   const [filters, setFilters] = useState({
@@ -132,9 +136,11 @@ export default function Services() {
 
       <div className="flex justify-between items-center gap-4 flex-wrap mb-6">
         <h1 className="text-3xl font-bold text-gradient m-0">Browse services</h1>
-        <Link to="/create" className="btn-gradient text-sm">
-          + Create Service
-        </Link>
+        {isProvider && (
+          <Link to="/create" className="btn-gradient text-sm">
+            + Create Service
+          </Link>
+        )}
       </div>
 
       <section className="glass rounded-2xl p-6 border border-slate-200/50 shadow-md mb-8" aria-label="Search and filter">

@@ -13,6 +13,9 @@ export default function ServiceDetail() {
   const [error, setError] = useState(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [bookingMessage, setBookingMessage] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewsError, setReviewsError] = useState(null);
 
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -37,6 +40,30 @@ export default function ServiceDetail() {
       }
     }
     load();
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadReviews() {
+      setReviewsLoading(true);
+      setReviewsError(null);
+      try {
+        const res = await API.get(`/services/${id}/reviews`);
+        if (!active) return;
+        setReviews(res.data || []);
+      } catch (err) {
+        console.error(err);
+        if (!active) return;
+        setReviewsError("Failed to load reviews");
+        setReviews([]);
+      } finally {
+        if (active) setReviewsLoading(false);
+      }
+    }
+    loadReviews();
     return () => {
       active = false;
     };
@@ -186,6 +213,48 @@ export default function ServiceDetail() {
           <div className="flex justify-between gap-4 text-sm text-slate-600 pb-4 border-b border-slate-200 mb-6">
             <span>Created</span>
             <strong className="text-slate-800">{createdAtLabel}</strong>
+          </div>
+
+          <div className="mt-6">
+            <h4 className="text-xl font-semibold text-slate-800 mb-3">Reviews</h4>
+            {reviewsLoading && <div className="text-sm text-slate-600">Loading reviews…</div>}
+            {reviewsError && <div className="text-sm text-slate-500">{reviewsError}</div>}
+            {!reviewsLoading && !reviewsError && reviews.length === 0 && (
+              <div className="text-sm text-slate-500">No reviews yet</div>
+            )}
+            {!reviewsLoading && !reviewsError && reviews.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-sm text-slate-700">
+                  ⭐ {(
+                    reviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) / reviews.length
+                  ).toFixed(1)}{" "}
+                  <span className="text-slate-500">({reviews.length} reviews)</span>
+                </div>
+                <div className="space-y-3">
+                  {reviews.map((r, idx) => (
+                    <div key={idx} className="border border-slate-200 rounded-lg p-3">
+                      <div className="flex justify-between text-sm text-slate-800">
+                        <span className="font-semibold">{r.reviewer_name || "Anonymous"}</span>
+                        <span className="text-amber-500">
+                          {"★".repeat(Math.max(1, Math.min(5, Number(r.rating) || 0)))}{" "}
+                          <span className="text-slate-600">
+                            ({Number(r.rating) || "—"})
+                          </span>
+                        </span>
+                      </div>
+                      {r.comment && (
+                        <p className="text-sm text-slate-700 mt-2 whitespace-pre-wrap">{r.comment}</p>
+                      )}
+                      {r.created_at && (
+                        <div className="text-xs text-slate-500 mt-1">
+                          {new Date(r.created_at).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {hasCoords && (

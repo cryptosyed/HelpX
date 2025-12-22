@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, Optional
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -6,16 +7,29 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.api import utils as api_utils
 from app.api.deps import get_current_user, get_db
-from app.models import Booking, Service as ServiceModel
+from app.models import Booking, Service as ServiceModel, User
 from sqlalchemy import func
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _booking_to_schema(db: Session, booking: Booking) -> schemas.BookingOut:
-    service = (
+    service: Optional[ServiceModel] = (
         db.query(ServiceModel).filter(ServiceModel.id == booking.service_id).first()
     )
+    user: Optional[User] = db.query(User).filter(User.id == booking.user_id).first()
+
+    location_str = None
+    if service:
+        parts = []
+        if getattr(service, "lat", None) is not None and getattr(service, "lon", None) is not None:
+            parts.append(f"{service.lat},{service.lon}")
+        if service.location:
+            # best-effort textual location
+            parts.append("geocoded")
+        location_str = ", ".join(parts) if parts else None
+
     return schemas.BookingOut(
         id=booking.id,
         service_id=booking.service_id,
@@ -26,6 +40,9 @@ def _booking_to_schema(db: Session, booking: Booking) -> schemas.BookingOut:
         status=booking.status,
         created_at=booking.created_at.isoformat() if booking.created_at else None,
         service=api_utils.service_to_schema(db, service) if service else None,
+        service_title=service.title if service else None,
+        user_name=user.name if user else None,
+        location=location_str,
     )
 
 
@@ -72,6 +89,7 @@ def create_booking(
     db.add(booking)
     db.commit()
     db.refresh(booking)
+    logger.info("booking_created provider_id=%s user_id=%s booking_id=%s", provider_id, current_user.id, booking.id)
     _audit(
         db,
         actor_id=current_user.id,
@@ -113,9 +131,10 @@ def list_provider_bookings(
     bookings = (
         db.query(Booking)
         .filter(Booking.provider_id == current_user.provider.id)
-        .order_by(Booking.scheduled_at.asc())
+        .order_by(Booking.created_at.desc())
         .all()
     )
+    logger.info("provider_bookings_fetched provider_id=%s count=%s", current_user.provider.id, len(bookings))
     # enrich with service data already via _booking_to_schema
     return [_booking_to_schema(db, b) for b in bookings]
 
@@ -144,6 +163,12 @@ def update_booking_status(
     db.add(booking)
     db.commit()
     db.refresh(booking)
+    logger.info(
+        "booking_status_updated booking_id=%s provider_id=%s status=%s",
+        booking.id,
+        current_user.provider.id,
+        booking.status,
+    )
     _audit(
         db,
         actor_id=current_user.id,

@@ -38,10 +38,12 @@ export default function Dashboard() {
   const normalizedRole = (role || user?.role || "").toLowerCase();
   const isProvider = normalizedRole === "provider";
   const isAdmin = normalizedRole === "admin";
-  const [services, setServices] = useState([]);
+  const [providerServices, setProviderServices] = useState([]);
+  const [globalServices, setGlobalServices] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [actionLoading, setActionLoading] = useState({});
   const [actionErrors, setActionErrors] = useState({});
+  const [serviceActionLoading, setServiceActionLoading] = useState({});
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -66,14 +68,18 @@ export default function Dashboard() {
   async function loadData() {
     setPageLoading(true);
     setError(null);
-    const servicesPromise = API.get("/services/provider")
+    const servicesPromise = API.get("/provider/services")
       .then((res) => {
-        setServices(res.data || []);
+        setProviderServices(res.data || []);
       })
       .catch((err) => {
         console.error(err);
         setError((prev) => prev ?? "Failed to load services.");
       });
+
+    const globalPromise = API.get("/services/global")
+      .then((res) => setGlobalServices(res.data || []))
+      .catch((err) => console.error(err));
 
     const bookingsPromise = API.get("/bookings/provider")
       .then((res) => {
@@ -85,7 +91,7 @@ export default function Dashboard() {
       });
 
     try {
-      await Promise.all([servicesPromise, bookingsPromise]);
+      await Promise.all([servicesPromise, bookingsPromise, globalPromise]);
     } finally {
       setPageLoading(false);
     }
@@ -118,28 +124,32 @@ export default function Dashboard() {
   const pendingBookings = bookings.filter((b) => (b.status || "").toLowerCase() === "pending");
   const activeJobs = bookings.filter((b) => (b.status || "").toLowerCase() === "accepted");
   const completedJobs = bookings.filter((b) => (b.status || "").toLowerCase() === "completed");
+  const incomingRequests = pendingBookings.filter((b) => !b.provider_id);
+  const assignedPending = pendingBookings.filter((b) => !!b.provider_id);
 
-  const renderBookingsSection = (title, items, { showActions = false, emptyText = "No items." } = {}) => (
-    <section className="glass rounded-2xl p-7 border border-slate-200/50 shadow-xl mb-8">
-      <h2 className="text-2xl font-bold text-slate-800 mb-6">{title}</h2>
-      {items.length === 0 ? (
-        <div className="text-slate-600 text-center py-8">{emptyText}</div>
-      ) : (
-        <div className="space-y-4">
-          {items.map((b) => (
-            <BookingCard
-              key={b.id}
-              booking={b}
-              showActions={showActions}
-              actionLoading={actionLoading}
-              actionErrors={actionErrors}
-              onUpdate={updateBookingStatus}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  );
+  const globalById = globalServices.reduce((acc, g) => {
+    acc[g.id] = g;
+    return acc;
+  }, {});
+
+  const toggleProviderService = async (id, current) => {
+    setServiceActionLoading((prev) => ({ ...prev, [id]: true }));
+    try {
+      await API.put(`/provider/services/${id}`, { is_active: !current });
+      setProviderServices((prev) =>
+        prev.map((svc) => (svc.id === id ? { ...svc, is_active: !current } : svc))
+      );
+    } catch (err) {
+      console.error(err);
+      showToast(err.response?.data?.detail || "Could not update service.", "error");
+    } finally {
+      setServiceActionLoading((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  };
 
   if (authLoading) {
     return (
@@ -175,52 +185,90 @@ export default function Dashboard() {
       )}
       {error && (
         <div className="glass rounded-xl p-6 text-center text-red-600 bg-red-50 border border-red-200 mb-6">
-          {error}
+          <div className="mb-3">{error}</div>
+          <button className="btn-ghost text-sm" onClick={loadData}>
+            Retry
+          </button>
         </div>
       )}
 
-      {renderBookingsSection("Pending Requests", pendingBookings, {
-        showActions: true,
-        emptyText: "No pending requests.",
-      })}
+      {/* Incoming Requests (unassigned) */}
+      <TaskSection
+        title="Incoming Requests"
+        emptyText="No nearby requests right now."
+        bookings={incomingRequests}
+        showActions
+        actionLoading={actionLoading}
+        actionErrors={actionErrors}
+        onAccept={(b) => updateBookingStatus(b.id, "accepted")}
+        onReject={(b) => updateBookingStatus(b.id, "rejected")}
+      />
 
-      {renderBookingsSection("Active Jobs", activeJobs, {
-        emptyText: "No active jobs.",
-      })}
+      {/* Active Jobs (accepted) */}
+      <TaskSection
+        title="Active Jobs"
+        emptyText="No active jobs."
+        bookings={activeJobs}
+        showActions={false}
+      />
 
-      {renderBookingsSection("Completed Jobs", completedJobs, {
-        emptyText: "No completed jobs.",
-      })}
+      {/* Completed Jobs */}
+      <TaskSection
+        title="Completed Jobs"
+        emptyText="No completed jobs."
+        bookings={completedJobs}
+        showActions={false}
+      />
 
       <section className="glass rounded-2xl p-7 border border-slate-200/50 shadow-xl mb-8">
         <div className="flex items-center justify-between gap-3 mb-6">
           <h2 className="text-2xl font-bold text-slate-800">My Services</h2>
           {isProvider && (
             <Link to="/create" className="btn-gradient text-sm">
-              + Create Service
+              + Offer a Service
             </Link>
           )}
         </div>
-        {services.length === 0 ? (
+        {providerServices.length === 0 ? (
           <div className="text-slate-600 text-center py-8">No services yet.</div>
         ) : (
           <div className="space-y-4">
-            {services.map((svc) => (
-              <article key={svc.id} className="glass rounded-xl p-5 border border-slate-200/50 shadow-md">
-                <div className="flex justify-between items-start gap-4 flex-wrap">
-                  <div className="flex-1">
-                    <h3 className="text-xl font-bold text-slate-800 mb-2">{svc.title}</h3>
-                    <p className="text-sm text-slate-600 mb-1">
-                      {svc.category || "General"} • ₹
-                      {svc.price ? Number(svc.price).toLocaleString("en-IN") : "—"}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Lat: {svc.lat ?? "n/a"} · Lon: {svc.lon ?? "n/a"}
-                    </p>
+            {providerServices.map((svc) => {
+              const global = globalById[svc.service_id];
+              return (
+                <article key={svc.id} className="glass rounded-xl p-5 border border-slate-200/50 shadow-md">
+                  <div className="flex justify-between items-start gap-4 flex-wrap">
+                    <div className="flex-1 space-y-1">
+                      <h3 className="text-xl font-bold text-slate-800 mb-1">{global?.title || "Service"}</h3>
+                      <p className="text-sm text-slate-600">Price: ₹{svc.price ? Number(svc.price).toLocaleString("en-IN") : "—"}</p>
+                      <p className="text-sm text-slate-600">Radius: {svc.service_radius_km ?? "—"} km</p>
+                      <p className="text-sm text-slate-600">Experience: {svc.experience_years ?? "—"} yrs</p>
+                      <p className="text-xs text-slate-500">Global category: {global?.category || "—"}</p>
+                    </div>
+                    <div className="flex flex-col gap-2 items-end">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${svc.is_active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"
+                          }`}
+                      >
+                        {svc.is_active ? "Active" : "Inactive"}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-ghost text-sm"
+                        onClick={() => toggleProviderService(svc.id, svc.is_active)}
+                        disabled={Boolean(serviceActionLoading[svc.id])}
+                      >
+                        {serviceActionLoading[svc.id]
+                          ? "Updating..."
+                          : svc.is_active
+                            ? "Deactivate"
+                            : "Activate"}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -228,15 +276,51 @@ export default function Dashboard() {
   );
 }
 
-function BookingCard({ booking, showActions, actionLoading, actionErrors, onUpdate }) {
+function TaskSection({
+  title,
+  bookings,
+  emptyText,
+  showActions = false,
+  onAccept,
+  onReject,
+  actionLoading = {},
+  actionErrors = {},
+}) {
+  return (
+    <section className="glass rounded-2xl p-7 border border-slate-200/50 shadow-xl mb-8">
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
+      </div>
+      {bookings.length === 0 ? (
+        <div className="text-slate-600 text-center py-8">{emptyText}</div>
+      ) : (
+        <div className="space-y-4">
+          {bookings.map((booking) => (
+            <BookingCard
+              key={booking.id}
+              booking={booking}
+              showActions={showActions}
+              actionLoading={actionLoading}
+              actionErrors={actionErrors}
+              onAccept={onAccept}
+              onReject={onReject}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BookingCard({ booking, showActions, actionLoading, actionErrors, onAccept, onReject }) {
   const [expanded, setExpanded] = useState(false);
   const userLabel = booking.user_name || booking.user?.name || (booking.user_id ? `User #${booking.user_id}` : "Customer");
   const location =
+    booking.user_address ||
     [booking.address?.line1, booking.address?.line2, booking.address?.city, booking.address?.pincode]
       .filter(Boolean)
       .join(", ") ||
     booking.location ||
-    booking.address ||
     (booking.lat && booking.lon ? `${booking.lat}, ${booking.lon}` : "—");
   const price =
     booking.price !== undefined && booking.price !== null ? `₹${Number(booking.price).toLocaleString("en-IN")}` : "—";
@@ -246,54 +330,37 @@ function BookingCard({ booking, showActions, actionLoading, actionErrors, onUpda
       <header className="flex justify-between items-start gap-4 mb-3">
         <div className="flex-1 space-y-1">
           <strong className="text-lg font-semibold text-slate-800 block">
-            {booking.service?.title || "Service"}{" "}
-            {booking.provider_id && (
-              <Link
-                to={`/providers/${booking.provider_id}`}
-                className="text-primary-start text-sm font-semibold hover:underline ml-1"
-              >
-                View provider
-              </Link>
-            )}
+            {booking.service_title || booking.service?.title || "Service"}
           </strong>
+          {booking.notes && (
+            <p className="text-sm text-slate-600 line-clamp-2">
+              <strong>Notes:</strong> {booking.notes}
+            </p>
+          )}
         </div>
         {renderStatusBadge(booking.status)}
       </header>
-      <button
-        type="button"
-        className="text-sm text-primary-start hover:underline"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        {expanded ? "Hide details" : "View details"}
-      </button>
-      {expanded && (
-        <div className="mt-3 space-y-2 text-sm text-slate-700">
-          <div>
-            <strong>Customer:</strong> {userLabel}
-          </div>
-          <div>
-            <strong>Address:</strong> {location}
-          </div>
-          <div>
-            <strong>When:</strong> {formatDateTime(booking.scheduled_at)}
-          </div>
-          <div>
-            <strong>Price:</strong> {price}
-          </div>
-          {booking.notes && (
-            <div>
-              <strong>Notes:</strong> {booking.notes}
-            </div>
-          )}
+      <div className="mt-2 space-y-2 text-sm text-slate-700">
+        <div>
+          <strong>Customer:</strong> {userLabel}
         </div>
-      )}
+        <div>
+          <strong>Address:</strong> {location}
+        </div>
+        <div>
+          <strong>When:</strong> {formatDateTime(booking.scheduled_at)}
+        </div>
+        <div>
+          <strong>Price:</strong> {price}
+        </div>
+      </div>
       {showActions && (
         <div className="flex flex-col gap-2 mt-4">
           <div className="flex gap-2">
             <button
               type="button"
               className="btn-gradient text-sm disabled:opacity-60"
-              onClick={() => onUpdate(booking.id, "accepted")}
+              onClick={() => onAccept?.(booking)}
               disabled={Boolean(actionLoading[booking.id])}
             >
               {actionLoading[booking.id] === "accepted" ? "Accepting..." : "Accept"}
@@ -301,7 +368,7 @@ function BookingCard({ booking, showActions, actionLoading, actionErrors, onUpda
             <button
               type="button"
               className="btn-ghost text-sm disabled:opacity-60"
-              onClick={() => onUpdate(booking.id, "rejected")}
+              onClick={() => onReject?.(booking)}
               disabled={Boolean(actionLoading[booking.id])}
             >
               {actionLoading[booking.id] === "rejected" ? "Rejecting..." : "Reject"}

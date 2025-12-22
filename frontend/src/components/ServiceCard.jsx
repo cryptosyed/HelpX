@@ -30,9 +30,10 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
 
     if (!service) return null;
 
+    const basePrice = service.base_price ?? service.price;
     const priceLabel =
-        service.price != null
-            ? `₹${Number(service.price).toLocaleString("en-IN")}`
+        basePrice != null
+            ? `₹${Number(basePrice).toLocaleString("en-IN")}`
             : "—";
 
     const hasCoords = service.lat != null && service.lon != null;
@@ -76,11 +77,7 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
                 </p>
 
                 <div className="text-xs text-slate-500" aria-label="Location metadata">
-                    {hasCoords && latLabel && lonLabel ? (
-                        <>Lat {latLabel} · Lon {lonLabel}</>
-                    ) : (
-                        "Coordinates not provided"
-                    )}
+                    Coordinates not provided
                 </div>
 
                 <footer className="flex gap-2.5 mt-auto pt-2.5">

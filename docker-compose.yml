@@ -20,7 +20,7 @@ services:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/helpx_db
       SECRET_KEY: dev-secret
     ports:
       - "8000:8000"

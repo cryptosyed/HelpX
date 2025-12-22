@@ -27,7 +27,7 @@ export default function ServiceDetail() {
       setLoading(true);
       setError(null);
       try {
-        const res = await API.get(`/services/${id}/`);
+        const res = await API.get(`/services/global/${id}`);
         if (!active) return;
         setService(res.data);
       } catch (err) {
@@ -46,27 +46,10 @@ export default function ServiceDetail() {
   }, [id]);
 
   useEffect(() => {
-    let active = true;
-    async function loadReviews() {
-      setReviewsLoading(true);
-      setReviewsError(null);
-      try {
-        const res = await API.get(`/services/${id}/reviews`);
-        if (!active) return;
-        setReviews(res.data || []);
-      } catch (err) {
-        console.error(err);
-        if (!active) return;
-        setReviewsError("Failed to load reviews");
-        setReviews([]);
-      } finally {
-        if (active) setReviewsLoading(false);
-      }
-    }
-    loadReviews();
-    return () => {
-      active = false;
-    };
+    // Global services do not have reviews yet
+    setReviews([]);
+    setReviewsError(null);
+    setReviewsLoading(false);
   }, [id]);
 
   useEffect(() => {
@@ -129,8 +112,8 @@ export default function ServiceDetail() {
   }, []);
 
   const priceLabel =
-    service?.price != null
-      ? `₹${Number(service.price).toLocaleString("en-IN")}`
+    service?.price != null || service?.base_price != null
+      ? `₹${Number((service.price ?? service.base_price) || 0).toLocaleString("en-IN")}`
       : "—";
   const createdAtLabel = service?.created_at
     ? new Date(service.created_at).toLocaleString()
@@ -207,17 +190,8 @@ export default function ServiceDetail() {
           </p>
 
           <div className="flex justify-between gap-4 text-sm text-slate-600 pt-4 border-t border-slate-200 mb-4">
-            <span>Provider</span>
-            <Link
-              to={`/providers/${service.provider_id}`}
-              className="text-primary-start font-semibold hover:underline"
-            >
-              {service.provider_name || `Provider #${service.provider_id}`}
-            </Link>
-          </div>
-          <div className="flex justify-between gap-4 text-sm text-slate-600 pb-4 border-b border-slate-200 mb-6">
-            <span>Created</span>
-            <strong className="text-slate-800">{createdAtLabel}</strong>
+            <span>Global service</span>
+            <strong className="text-slate-800">#{service.id}</strong>
           </div>
 
           <div className="mt-6">

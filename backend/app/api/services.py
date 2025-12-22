@@ -7,10 +7,91 @@ from sqlalchemy.orm import Session
 from app import crud, schemas
 from app.api import utils as api_utils
 from app.api.deps import get_current_user, get_db
-from app.models import Provider, Service as ServiceModel
+from app.models import Provider, Service as ServiceModel, GlobalService
+from app.schemas.service import (
+    GlobalServiceCreate,
+    GlobalServiceOut,
+    GlobalServiceUpdate,
+)
 
 router = APIRouter()
 
+
+@router.get("/global", response_model=list[schemas.GlobalServiceOut])
+def list_global_services(db: Session = Depends(get_db)):
+    """
+    Public/global catalog for providers/users to browse.
+    """
+    items = (
+        db.query(GlobalService)
+        .filter(GlobalService.is_active == True)  # noqa: E712
+        .order_by(GlobalService.title.asc())
+        .all()
+    )
+    return items
+
+
+# PUBLIC: Global service detail
+@router.get("/global/{service_id}", response_model=schemas.ServiceOut)
+def get_global_service(service_id: int, db: Session = Depends(get_db)):
+    gs = db.query(GlobalService).filter(GlobalService.id == service_id, GlobalService.is_active == True).first()  # noqa: E712
+    if not gs:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return schemas.ServiceOut(
+        id=gs.id,
+        provider_id=0,
+        title=gs.title,
+        description=gs.description,
+        category=gs.category,
+        price=gs.base_price,
+        lat=None,
+        lon=None,
+        image_url="/images/service-placeholder.jpg",
+        flagged=False,
+        flag_reason=None,
+        approved=True,
+        created_at=None,
+    )
+
+
+# PUBLIC: Global service list (simple filters)
+@router.get("/global", response_model=List[GlobalServiceOut])
+def list_global_services(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    page: int = 1,
+    page_size: int = 50,
+    db: Session = Depends(get_db),
+):
+    page = max(page, 1)
+    page_size = max(1, min(page_size, 200))
+    query = db.query(GlobalService).filter(GlobalService.is_active == True)  # noqa: E712
+
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            or_(
+                GlobalService.title.ilike(like),
+                GlobalService.description.ilike(like),
+                GlobalService.category.ilike(like),
+            )
+        )
+    if category:
+        query = query.filter(GlobalService.category == category)
+    if min_price is not None:
+        query = query.filter(GlobalService.base_price >= min_price)
+    if max_price is not None:
+        query = query.filter(GlobalService.base_price <= max_price)
+
+    items = (
+        query.order_by(GlobalService.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return items
 
 # CREATE (protected)
 @router.post("/", response_model=schemas.ServiceOut)
@@ -92,6 +173,85 @@ def list_services(
         page=page,
         page_size=page_size,
     )
+
+
+# ========== ADMIN: GLOBAL SERVICE CATALOG ==========
+
+
+def _require_admin(current_user):
+    if not current_user or getattr(current_user, "role", None) != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+@router.get("/admin/global-services", response_model=List[GlobalServiceOut])
+def admin_list_global_services(
+    db: Session = Depends(get_db), current_user=Depends(get_current_user)
+):
+    _require_admin(current_user)
+    services = db.query(GlobalService).order_by(GlobalService.created_at.desc()).all()
+    return services
+
+
+@router.post("/admin/global-services", response_model=GlobalServiceOut, status_code=status.HTTP_201_CREATED)
+def admin_create_global_service(
+    payload: GlobalServiceCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_admin(current_user)
+    svc = GlobalService(
+        title=payload.title,
+        category=payload.category,
+        description=payload.description,
+        base_price=payload.base_price,
+        is_active=payload.is_active if payload.is_active is not None else True,
+    )
+    db.add(svc)
+    db.commit()
+    db.refresh(svc)
+    return svc
+
+
+@router.put("/admin/global-services/{service_id}", response_model=GlobalServiceOut)
+def admin_update_global_service(
+    service_id: int,
+    payload: GlobalServiceUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_admin(current_user)
+    svc = db.query(GlobalService).filter(GlobalService.id == service_id).first()
+    if not svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    if payload.title is not None:
+        svc.title = payload.title
+    if payload.category is not None:
+        svc.category = payload.category
+    if payload.description is not None:
+        svc.description = payload.description
+    if payload.base_price is not None:
+        svc.base_price = payload.base_price
+    if payload.is_active is not None:
+        svc.is_active = payload.is_active
+    db.add(svc)
+    db.commit()
+    db.refresh(svc)
+    return svc
+
+
+@router.delete("/admin/global-services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_global_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _require_admin(current_user)
+    svc = db.query(GlobalService).filter(GlobalService.id == service_id).first()
+    if not svc:
+        raise HTTPException(status_code=404, detail="Service not found")
+    db.delete(svc)
+    db.commit()
+    return None
 
 
 # PROVIDER: list services belonging to logged-in provider

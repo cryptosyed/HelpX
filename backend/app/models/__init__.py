@@ -1,7 +1,8 @@
 from app.db.base import Base
 from .user import User
 from .provider import Provider
-from .service import Service
+from .service import Service, GlobalService
+from .provider_service import ProviderService
 from .booking import Booking
 from .address import Address
 from .provider_payout_settings import ProviderPayoutSettings
@@ -14,6 +15,8 @@ __all__ = [
     "User",
     "Provider",
     "Service",
+    "GlobalService",
+    "ProviderService",
     "Booking",
     "Address",
     "ProviderPayoutSettings",

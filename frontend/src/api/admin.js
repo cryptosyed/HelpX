@@ -1,32 +1,4 @@
-import axios from "axios";
-
-const api = axios.create({
-  baseURL: "http://localhost:8000",
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-api.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    const status = err.response?.status;
-    const message =
-      err.response?.data?.detail ||
-      err.response?.data?.message ||
-      err.message ||
-      "Request failed";
-    const error = new Error(message);
-    error.status = status;
-    error.response = err.response;
-    return Promise.reject(error);
-  }
-);
+import api from "./client";
 
 export const adminApi = {
   dashboard: async () => {

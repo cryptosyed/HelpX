@@ -50,17 +50,16 @@ export default function Services() {
         if (filters.category) params.append("category", filters.category);
         if (filters.minPrice) params.append("min_price", filters.minPrice);
         if (filters.maxPrice) params.append("max_price", filters.maxPrice);
-        params.append("page", meta.page);
-        params.append("page_size", PAGE_SIZE);
 
-        const res = await API.get(`/services/?${params.toString()}`);
+        const res = await API.get(`/services/global?${params.toString()}`);
         if (!active) return;
-        setServices(res.data?.items || []);
-        setMeta({
-          total: res.data?.total ?? 0,
-          page: res.data?.page ?? 1,
-          page_size: res.data?.page_size ?? PAGE_SIZE,
-        });
+        const items = res.data || [];
+        setServices(items);
+        setMeta((prev) => ({
+          ...prev,
+          total: items.length,
+          page_size: PAGE_SIZE,
+        }));
       } catch (err) {
         console.error(err);
         if (!active) return;
@@ -100,15 +99,24 @@ export default function Services() {
       }
       if (clientFilters.minPrice) {
         const min = Number(clientFilters.minPrice);
-        if (svc.price == null || Number(svc.price) < min) return false;
+        if (svc.base_price == null || Number(svc.base_price) < min) return false;
       }
       if (clientFilters.maxPrice) {
         const max = Number(clientFilters.maxPrice);
-        if (svc.price == null || Number(svc.price) > max) return false;
+        if (svc.base_price == null || Number(svc.base_price) > max) return false;
       }
       return true;
     });
   }, [services, clientFilters]);
+
+  useEffect(() => {
+    setMeta((prev) => ({ ...prev, total: filteredServices.length }));
+  }, [filteredServices]);
+
+  const pagedServices = useMemo(() => {
+    const start = (meta.page - 1) * PAGE_SIZE;
+    return filteredServices.slice(start, start + PAGE_SIZE);
+  }, [filteredServices, meta.page]);
 
   function handleFilterChange(e) {
     const { name, value } = e.target;
@@ -138,7 +146,7 @@ export default function Services() {
         <h1 className="text-3xl font-bold text-gradient m-0">Browse services</h1>
         {isProvider && (
           <Link to="/create" className="btn-gradient text-sm">
-            + Create Service
+            + Offer a Service
           </Link>
         )}
       </div>
@@ -262,7 +270,7 @@ export default function Services() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8" role="list">
-        {filteredServices.map((svc, idx) => (
+        {pagedServices.map((svc, idx) => (
           <ServiceCard
             key={svc.id}
             service={svc}

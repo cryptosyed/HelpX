@@ -25,3 +25,20 @@ class Service(Base):
     provider = relationship("Provider", back_populates="services")
     reviews = relationship("Review", back_populates="service")
 
+
+class GlobalService(Base):
+    """
+    System-level service catalog entry (not provider-owned).
+    Used for discovery and templating.
+    """
+
+    __tablename__ = "global_services"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    category = Column(String, index=True, nullable=False)
+    description = Column(Text, nullable=True)
+    base_price = Column(Numeric, nullable=True)
+    is_active = Column(Boolean, default=True, server_default="true")
+    created_at = Column(DateTime, server_default=func.now())
+

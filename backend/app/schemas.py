@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator, Field
+from pydantic import BaseModel, EmailStr, field_validator, Field, model_validator
 from typing import Optional, List
 from datetime import datetime
 import re
@@ -74,14 +74,18 @@ class ServiceListResponse(BaseModel):
 
 
 class BookingCreate(BaseModel):
-    service_id: int
-    provider_id: Optional[int] = Field(default=None, description="Optional override; must own the service")
+    service_id: Optional[int] = Field(default=None, description="Legacy provider-owned service")
+    global_service_id: Optional[int] = Field(default=None, description="Global service id (new flow)")
+    provider_id: Optional[int] = Field(default=None, description="Optional provider; may be null for unassigned")
     scheduled_at: Optional[datetime] = Field(
         default=None,
         validation_alias="when",
         description="When the booking is requested",
     )
     notes: Optional[str]
+    user_address: Optional[str] = None
+    user_lat: Optional[float] = None
+    user_lon: Optional[float] = None
 
     @field_validator("scheduled_at")
     @classmethod
@@ -90,20 +94,32 @@ class BookingCreate(BaseModel):
             raise ValueError("scheduled_at (or 'when') is required")
         return v
 
+    @model_validator(mode="after")
+    def validate_required_fields(self):
+        if self.scheduled_at is None:
+            raise ValueError("scheduled_at is required")
+
+        if not (self.service_id or self.global_service_id):
+            raise ValueError("Either service_id or global_service_id must be provided")
+
+        return self
+
     class Config:
         populate_by_name = True
 
 
 class BookingOut(BaseModel):
     id: int
-    service_id: int
+    service_id: Optional[int] = None
+    global_service_id: Optional[int] = None
     user_id: int
-    provider_id: int
+    provider_id: Optional[int] = None
     scheduled_at: datetime
-    notes: Optional[str]
+    notes: Optional[str] = None
     status: str
-    service: Optional[ServiceOut]
-    created_at: Optional[str]
+    created_at: Optional[str] = None
+
+    service: Optional[ServiceOut] = None
     service_title: Optional[str] = None
     user_name: Optional[str] = None
     location: Optional[str] = None

@@ -207,8 +207,13 @@ export default function ServiceDetail() {
           </p>
 
           <div className="flex justify-between gap-4 text-sm text-slate-600 pt-4 border-t border-slate-200 mb-4">
-            <span>Provider ID</span>
-            <strong className="text-slate-800">#{service.provider_id}</strong>
+            <span>Provider</span>
+            <Link
+              to={`/providers/${service.provider_id}`}
+              className="text-primary-start font-semibold hover:underline"
+            >
+              {service.provider_name || `Provider #${service.provider_id}`}
+            </Link>
           </div>
           <div className="flex justify-between gap-4 text-sm text-slate-600 pb-4 border-b border-slate-200 mb-6">
             <span>Created</span>

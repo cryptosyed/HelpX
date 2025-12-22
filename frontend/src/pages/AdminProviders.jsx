@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { adminApi } from "../api/admin";
 
 export default function AdminProviders() {
@@ -56,7 +57,14 @@ export default function AdminProviders() {
           <tbody>
             {items.map((p) => (
               <tr key={p.id} className="border-t">
-                <td className="px-3 sm:px-4 py-2">{p.business_name || p.id}</td>
+                <td className="px-3 sm:px-4 py-2">
+                  <Link
+                    to={`/providers/${p.id}`}
+                    className="text-primary-start hover:underline font-semibold"
+                  >
+                    {p.business_name || `Provider #${p.id}`}
+                  </Link>
+                </td>
                 <td className="px-3 sm:px-4 py-2">{p.rating ?? 0}</td>
                 <td className="px-3 sm:px-4 py-2">{p.is_suspended ? "Suspended" : "Active"}</td>
                 <td className="px-3 sm:px-4 py-2">

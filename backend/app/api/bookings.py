@@ -62,7 +62,10 @@ def create_booking(
             status_code=400, detail="Providers cannot book their own services"
         )
 
+    # If caller did not specify, deterministically assign the service owner
     provider_id = payload.provider_id or svc.provider_id
+    if not provider_id:
+        raise HTTPException(status_code=400, detail="No provider available for this service")
 
     # Prevent booking your own service (self-matching protection)
     if current_user.provider and current_user.provider.id == provider_id:

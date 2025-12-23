@@ -191,11 +191,11 @@ function AppContent() {
           <Route path="/bookings/:bookingId" element={<BookingDetail />} />
           <Route
             path="/dashboard/profile"
-            element={
-              <ProtectedRoute allowedRoles={["provider"]}>
-                <ProviderProfile />
-              </ProtectedRoute>
-            }
+              element={
+                <ProtectedRoute allowedRoles={["provider"]}>
+                  <ProviderProfile />
+                </ProtectedRoute>
+              }
           />
         </Routes>
       </main>

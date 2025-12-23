@@ -229,6 +229,24 @@ class ProviderOut(BaseModel):
         from_attributes = True
 
 
+class ProviderProfileBase(BaseModel):
+    business_name: Optional[str] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+
+
+class ProviderProfileOut(ProviderProfileBase):
+    provider_id: int
+    business_name: Optional[str]
+    phone: Optional[str]
+    bio: Optional[str]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
 class ProviderMatchResult(BaseModel):
     provider_id: int
     service_id: int

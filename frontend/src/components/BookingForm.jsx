@@ -24,7 +24,7 @@ export default function BookingForm({ service, serviceId, onCreated }) {
         setIsOwnService(false);
         return;
       }
-      setIsOwnService(false);
+        setIsOwnService(false);
     }
     resolveOwnership();
   }, [auth.isAuthenticated, auth.role]);
@@ -132,7 +132,7 @@ export default function BookingForm({ service, serviceId, onCreated }) {
           <span className="text-xs text-slate-600 self-center">Map view coming soon for routing.</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
+              <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Latitude</label>
             <input
               type="number"
@@ -141,7 +141,7 @@ export default function BookingForm({ service, serviceId, onCreated }) {
               className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 bg-white text-slate-700 outline-none focus:border-primary-start focus:ring-4 focus:ring-primary-start/10 transition-all"
               step="any"
             />
-          </div>
+                </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Longitude</label>
             <input
@@ -151,8 +151,8 @@ export default function BookingForm({ service, serviceId, onCreated }) {
               className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 bg-white text-slate-700 outline-none focus:border-primary-start focus:ring-4 focus:ring-primary-start/10 transition-all"
               step="any"
             />
-          </div>
-        </div>
+                </div>
+              </div>
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1">Address (optional if lat/lon given)</label>
           <textarea
@@ -165,9 +165,9 @@ export default function BookingForm({ service, serviceId, onCreated }) {
         {locationError && (
           <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
             {locationError}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
 
       {message && (
         <div

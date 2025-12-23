@@ -25,5 +25,6 @@ class Provider(Base):
     user = relationship("User", back_populates="provider")
     services = relationship("Service", back_populates="provider")
     bookings = relationship("Booking", back_populates="provider")
+    profile = relationship("ProviderProfile", back_populates="provider", uselist=False)
     payout_settings = relationship("ProviderPayoutSettings", back_populates="provider", uselist=False)
 

@@ -118,7 +118,7 @@ export default function UserDashboard() {
 
   async function createAddress() {
     // noop: endpoint removed; keep UI stable without throwing
-    setShowAddressModal(false);
+      setShowAddressModal(false);
   }
 
   async function deleteAddress(id) {
@@ -127,7 +127,7 @@ export default function UserDashboard() {
 
   async function updateProfile() {
     // noop for removed endpoint
-    setShowProfileModal(false);
+      setShowProfileModal(false);
   }
 
   if (loading) {

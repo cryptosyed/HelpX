@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, extract, text
@@ -8,9 +8,16 @@ from sqlalchemy.orm import Session
 
 from app import schemas
 from app.api import utils as api_utils
-from app.api.deps import get_db, get_current_provider
-from app.models import User, Provider, Booking, ProviderPayoutSettings, Service, Review
-from app.crud import create_service
+from app.api.deps import get_db, get_current_provider, get_current_user
+from app.models import (
+    User,
+    Provider,
+    ProviderProfile,
+    Booking,
+    ProviderPayoutSettings,
+    Review,
+)
+from app.models.provider_service import ProviderService
 
 logger = logging.getLogger(__name__)
 
@@ -26,44 +33,137 @@ def get_provider_from_user(user: User, db: Session) -> Provider:
     return provider
 
 
+# ========== PROVIDER PROFILE ==========
+
+
+@router.get("/profile", response_model=schemas.ProviderProfileOut)
+def get_provider_profile(
+    provider_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns provider profile. If provider_id is omitted, returns the current provider's profile.
+    Always returns an object (empty fields if not yet created).
+    """
+    if provider_id is None:
+        if current_user.role not in ["provider", "admin"]:
+            raise HTTPException(status_code=403, detail="Provider access required")
+        provider = get_provider_from_user(current_user, db)
+        target_provider_id = provider.id
+    else:
+        provider = db.query(Provider).filter(Provider.id == provider_id).first()
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
+        target_provider_id = provider.id
+
+    profile = (
+        db.query(ProviderProfile)
+        .filter(ProviderProfile.provider_id == target_provider_id)
+        .first()
+    )
+    if not profile:
+        return schemas.ProviderProfileOut(
+            provider_id=target_provider_id,
+            business_name=None,
+            phone=None,
+            bio=None,
+            created_at=None,
+            updated_at=None,
+        )
+    return profile
+
+
+@router.put("/profile", response_model=schemas.ProviderProfileOut)
+def upsert_provider_profile(
+    payload: schemas.ProviderProfileBase,
+    db: Session = Depends(get_db),
+    provider: Provider = Depends(get_current_provider),
+):
+    profile = (
+        db.query(ProviderProfile)
+        .filter(ProviderProfile.provider_id == provider.id)
+        .first()
+    )
+
+    if not profile:
+        profile = ProviderProfile(provider_id=provider.id)
+        db.add(profile)
+
+    profile.business_name = payload.business_name
+    profile.phone = payload.phone
+    profile.bio = payload.bio
+
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
 # ========== PROVIDER SERVICE CRUD ==========
 
-@router.post("/provider/services", response_model=schemas.ServiceOut)
+@router.post("/services", response_model=schemas.ProviderServiceOut)
 def create_provider_service(
-    svc: schemas.ServiceCreate,
+    svc: schemas.ProviderServiceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_provider),
 ):
     provider = get_provider_from_user(current_user, db)
-    db_svc = create_service(db, provider_id=provider.id, svc=svc)
-    # Best-effort location update if lat/lon provided and not handled in crud
-    if svc.lat is not None and svc.lon is not None:
-        try:
-            db.execute(
-                text(
-                    "UPDATE services SET location = ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) WHERE id = :id"
-                ),
-                {"lon": svc.lon, "lat": svc.lat, "id": db_svc.id},
-            )
-            db.commit()
-        except Exception as exc:  # pragma: no cover - optional enhancement
-            logger.warning("Failed to set location for service %s: %s", db_svc.id, exc)
-    logger.info("Service created by provider %s -> service %s", provider.id, db_svc.id)
-    return api_utils.service_to_schema(db, db_svc)
+
+    # Prevent duplicate service offering
+    existing = (
+        db.query(ProviderService)
+        .filter(
+            ProviderService.provider_id == provider.id,
+            ProviderService.service_id == svc.service_id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="Provider already registered for this service",
+        )
+
+    ps = ProviderService(
+        provider_id=provider.id,
+        service_id=svc.service_id,
+        price=svc.price,
+        service_radius_km=svc.service_radius_km,
+        experience_years=svc.experience_years,
+        is_active=True,
+    )
+
+    db.add(ps)
+    db.commit()
+    db.refresh(ps)
+
+    logger.info(
+        "Provider %s registered service %s",
+        provider.id,
+        svc.service_id,
+    )
+
+    return ps
 
 
-@router.get("/provider/services", response_model=List[schemas.ServiceOut])
+@router.get("/services", response_model=List[schemas.ProviderServiceOut])
 def list_provider_services(
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_provider)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_provider),
 ):
     provider = get_provider_from_user(current_user, db)
+
     services = (
-        db.query(Service).filter(Service.provider_id == provider.id).order_by(Service.created_at.desc()).all()
+        db.query(ProviderService)
+        .filter(ProviderService.provider_id == provider.id)
+        .order_by(ProviderService.created_at.desc())
+        .all()
     )
-    return [api_utils.service_to_schema(db, svc) for svc in services]
+
+    return services
 
 
-@router.put("/provider/services/{service_id}", response_model=schemas.ServiceOut)
+@router.put("/services/{service_id}", response_model=schemas.ServiceOut)
 def update_provider_service(
     service_id: int,
     svc: schemas.ServiceCreate,
@@ -104,7 +204,7 @@ def update_provider_service(
     return api_utils.service_to_schema(db, db_svc)
 
 
-@router.delete("/provider/services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_provider_service(
     service_id: int,
     db: Session = Depends(get_db),
@@ -160,7 +260,7 @@ def get_provider_rating_summary(provider_id: int, db: Session = Depends(get_db))
 # ========== PROVIDER BOOKING ACTIONS ==========
 
 
-@router.get("/provider/bookings", response_model=List[schemas.BookingOut])
+@router.get("/bookings", response_model=List[schemas.BookingOut])
 def list_provider_bookings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_provider),
@@ -196,7 +296,7 @@ def _enforce_accepted(booking: Booking):
         raise HTTPException(status_code=400, detail="Action requires accepted booking")
 
 
-@router.put("/provider/bookings/{booking_id}/accept", response_model=schemas.BookingOut)
+@router.put("/bookings/{booking_id}/accept", response_model=schemas.BookingOut)
 def accept_booking(
     booking_id: int,
     db: Session = Depends(get_db),
@@ -212,7 +312,7 @@ def accept_booking(
     return api_utils.booking_to_schema(db, booking)
 
 
-@router.put("/provider/bookings/{booking_id}/reject", response_model=schemas.BookingOut)
+@router.put("/bookings/{booking_id}/reject", response_model=schemas.BookingOut)
 def reject_booking(
     booking_id: int,
     db: Session = Depends(get_db),
@@ -228,7 +328,7 @@ def reject_booking(
     return api_utils.booking_to_schema(db, booking)
 
 
-@router.put("/provider/bookings/{booking_id}/complete", response_model=schemas.BookingOut)
+@router.put("/bookings/{booking_id}/complete", response_model=schemas.BookingOut)
 def complete_booking(
     booking_id: int,
     db: Session = Depends(get_db),

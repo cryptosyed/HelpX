@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import API from "../api";
 import PageHeader from "../components/PageHeader";
-import { loadProviderProfile } from "./ProviderProfile";
 
 const DEFAULT_CENTER = { lat: 12.9716, lon: 77.5946 };
 
@@ -46,6 +45,9 @@ export default function BookingDetail() {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [providerProfile, setProviderProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -77,6 +79,35 @@ export default function BookingDetail() {
     };
   }, [bookingId]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadProfile() {
+      if (!booking?.provider_id) {
+        setProviderProfile(null);
+        return;
+      }
+      setProfileLoading(true);
+      setProfileError(null);
+      try {
+        const res = await API.get("/provider/profile", {
+          params: { provider_id: booking.provider_id },
+        });
+        if (!active) return;
+        setProviderProfile(res.data || null);
+      } catch (err) {
+        if (!active) return;
+        const detail = err.response?.data?.detail;
+        setProfileError(detail || "Unable to load provider details right now.");
+      } finally {
+        if (active) setProfileLoading(false);
+      }
+    }
+    loadProfile();
+    return () => {
+      active = false;
+    };
+  }, [booking?.provider_id]);
+
   const title =
     booking?.service_title ||
     booking?.service?.title ||
@@ -91,27 +122,24 @@ export default function BookingDetail() {
 
   const providerInfo = useMemo(() => {
     if (!booking) return null;
-    if (booking.provider_id && booking.provider) {
-      return {
-        name: booking.provider.name || booking.provider.display_name || "Assigned provider",
-        business: booking.provider.business_name,
-        email: booking.provider.email,
-        phone: booking.provider.phone,
-      };
-    }
-    if (booking.provider_id) {
-      const cached = loadProviderProfile ? loadProviderProfile() : null;
-      if (cached) {
-        return {
-          name: cached.display_name || "Assigned provider",
-          business: cached.display_name,
-          phone: cached.phone,
-        };
-      }
-      return { name: "Assigned provider" };
-    }
-    return null;
-  }, [booking]);
+    const businessName =
+      providerProfile?.business_name ||
+      booking.provider?.business_name ||
+      null;
+    const providerName =
+      businessName ||
+      booking.provider?.name ||
+      booking.provider?.display_name ||
+      null;
+    const phone = providerProfile?.phone || booking.provider?.phone || null;
+
+    if (!booking.provider_id && !providerProfile) return null;
+    return {
+      name: providerName || "Assigned provider",
+      business: businessName,
+      phone,
+    };
+  }, [booking, providerProfile]);
 
   const mapCoords = useMemo(() => {
     const lat = booking?.user_lat;
@@ -207,7 +235,15 @@ export default function BookingDetail() {
 
           <section className="glass rounded-2xl p-6 border border-slate-200/50 shadow-xl space-y-4">
             <h3 className="text-lg font-semibold text-slate-800">Provider</h3>
-            {providerInfo ? (
+            {profileLoading && (
+              <div className="text-sm text-slate-600">Loading provider details…</div>
+            )}
+            {profileError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                {profileError}
+              </div>
+            )}
+            {!profileLoading && !profileError && providerInfo ? (
               <div className="space-y-2 text-sm text-slate-700">
                 <div>
                   <strong>Name:</strong> {providerInfo.name}
@@ -224,7 +260,8 @@ export default function BookingDetail() {
                 )}
                 <ContactCTA status={status} phone={providerInfo.phone} />
               </div>
-            ) : (
+            ) : null}
+            {!profileLoading && !profileError && !providerInfo && (
               <div className="text-sm text-slate-600">
                 Provider contact details will be shared once your booking is accepted.
               </div>

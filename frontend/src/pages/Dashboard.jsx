@@ -4,6 +4,7 @@ import API from "../api";
 import PageHeader from "../components/PageHeader";
 import { useAuth } from "../hooks/useAuth";
 import { showToast } from "../utils/toast";
+import { loadProviderProfile } from "./ProviderProfile";
 
 const statusVariant = (status) => {
   const normalized = (status || "").toLowerCase();
@@ -38,6 +39,8 @@ export default function Dashboard() {
   const normalizedRole = (role || user?.role || "").toLowerCase();
   const isProvider = normalizedRole === "provider";
   const isAdmin = normalizedRole === "admin";
+  const cachedProfile = loadProviderProfile ? loadProviderProfile() : null;
+  const profileIncomplete = isProvider && (!cachedProfile || !cachedProfile.phone);
   const [providerServices, setProviderServices] = useState([]);
   const [globalServices, setGlobalServices] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -172,11 +175,21 @@ export default function Dashboard() {
       <PageHeader
         title="Provider Dashboard"
         action={
-          <button type="button" className="btn-ghost text-sm" onClick={loadData}>
-            Refresh
-          </button>
+          <div className="flex gap-2">
+            <Link to="/dashboard/profile" className="btn-ghost text-sm">
+              Profile
+            </Link>
+            <button type="button" className="btn-ghost text-sm" onClick={loadData}>
+              Refresh
+            </button>
+          </div>
         }
       />
+      {profileIncomplete && (
+        <div className="glass rounded-xl p-4 border border-amber-200 bg-amber-50 text-amber-800 mb-4">
+          Complete your profile to receive bookings. <Link className="underline font-semibold" to="/provider/profile">Update profile</Link>
+        </div>
+      )}
 
       {pageLoading && (
         <div className="glass rounded-xl p-6 text-center text-slate-600 mb-6">

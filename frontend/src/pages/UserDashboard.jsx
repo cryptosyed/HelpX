@@ -224,10 +224,10 @@ export default function UserDashboard() {
                       </button>
                     )}
                     <Link
-                      to={`/service/${booking.service_id}`}
+                      to={`/bookings/${booking.id}`}
                       className="btn-gradient text-sm"
                     >
-                      View Service
+                      View Booking
                     </Link>
                   </div>
                 </div>

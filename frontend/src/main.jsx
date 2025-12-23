@@ -13,6 +13,8 @@ import CreateService from "./pages/CreateService";
 import Dashboard from "./pages/Dashboard";
 import UserDashboard from "./pages/UserDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import BookingDetail from "./pages/BookingDetail";
+import ProviderProfile from "./pages/ProviderProfile";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { useAuthContext } from "./contexts/AuthContext";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -185,6 +187,16 @@ function AppContent() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/service/:id" element={<ServiceDetail />} />
+          <Route path="/booking/:bookingId" element={<BookingDetail />} />
+          <Route path="/bookings/:bookingId" element={<BookingDetail />} />
+          <Route
+            path="/dashboard/profile"
+            element={
+              <ProtectedRoute allowedRoles={["provider"]}>
+                <ProviderProfile />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </main>
     </div>

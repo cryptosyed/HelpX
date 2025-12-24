@@ -1,60 +1,133 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from jose import jwt
+from passlib.context import CryptContext
+
 from app import schemas, crud
 from app.api.deps import get_db, get_current_user
 from app.models import User
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-from jose import jwt
-
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 router = APIRouter()
 
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
+# -------------------------------------------------------------------
+# Password hashing (bcrypt with 72-byte safety)
+# -------------------------------------------------------------------
 
-def get_password_hash(password):
-    return pwd_context.hash(password)
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
+
+def _truncate_for_bcrypt(password: str) -> str:
+    """bcrypt only supports 72 bytes"""
+    raw = password.encode("utf-8")
+    if len(raw) > 72:
+        raw = raw[:72]
+    return raw.decode("utf-8", errors="ignore")
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(_truncate_for_bcrypt(password))
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(
+        _truncate_for_bcrypt(plain_password),
+        hashed_password
+    )
+
+# -------------------------------------------------------------------
+# AUTH ROUTES
+# -------------------------------------------------------------------
 
 @router.post("/register", response_model=schemas.UserOut)
-def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
-    print("DB USER SEEN BY SESSION:", db.bind.url.username)
+def register(
+    user_in: schemas.UserCreate,
+    db: Session = Depends(get_db),
+):
+    """
+    Public registration.
+    Allowed roles: customer, provider
+    Admins must be created manually.
+    """
     existing = crud.get_user_by_email(db, user_in.email)
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Validate role - only customer or provider allowed via public registration
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+
     role = user_in.role or "customer"
-    if role not in ["customer", "provider"]:
-        raise HTTPException(status_code=400, detail="Invalid role. Must be 'customer' or 'provider'")
-    
-    hashed = get_password_hash(user_in.password)
-    user = crud.create_user(db, email=user_in.email, hashed_password=hashed, name=user_in.name, role=role)
+    if role not in {"customer", "provider"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role"
+        )
+
+    hashed_password = get_password_hash(user_in.password)
+
+    user = crud.create_user(
+        db=db,
+        email=user_in.email,
+        hashed_password=hashed_password,
+        name=user_in.name,
+        role=role,
+    )
+
     return user
 
+
 @router.post("/login", response_model=schemas.Token)
-def login(form_data: schemas.UserCreate, db: Session = Depends(get_db)):
+def login(
+    form_data: schemas.UserLogin,
+    db: Session = Depends(get_db),
+):
+    """
+    Login using email + password.
+    Returns JWT token.
+    """
     user = crud.get_user_by_email(db, form_data.email)
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    
-    # Include role in JWT token
-    to_encode = {
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+
+    if not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+
+    expire = datetime.utcnow() + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+
+    payload = {
         "sub": str(user.id),
+        "email": user.email,
         "role": user.role,
-        "email": user.email
+        "exp": expire,
     }
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
-    return {"access_token": encoded_jwt, "token_type": "bearer"}
+
+    token = jwt.encode(
+        payload,
+        settings.SECRET_KEY,
+        algorithm="HS256"
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 
 @router.get("/me", response_model=schemas.UserOut)
-def get_current_user_info(
+def me(
     current_user: User = Depends(get_current_user),
 ):
-    """Get current logged-in user information"""
+    """
+    Get current authenticated user.
+    """
     return current_user

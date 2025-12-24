@@ -1,10 +1,6 @@
 """
-DEV-ONLY: Reset providers/services and seed realistic Bangalore demo data.
-
-Run locally:
-  docker compose exec backend python /app/scripts/seed_bangalore_demo.py
-or:
-  cd backend && python scripts/seed_bangalore_demo.py
+DEV-ONLY (legacy): Reset providers/services and seed Bangalore demo data.
+Prefer using app.db.seed_demo for current flows.
 """
 from datetime import datetime, timedelta
 import os

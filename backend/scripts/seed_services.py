@@ -1,7 +1,7 @@
 """
 Seed script to create sample providers and services
 Run: python scripts/seed_services.py
-Or: docker compose exec backend python /app/scripts/seed_services.py
+Legacy helper; prefer app.db.seed_demo for current flows.
 """
 import sys
 import os

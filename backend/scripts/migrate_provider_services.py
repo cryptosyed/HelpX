@@ -1,8 +1,6 @@
 """
 One-time migration to seed GlobalService + ProviderService from existing provider-owned services.
-
-Run (dev/local):
-  docker compose exec backend python /app/scripts/migrate_provider_services.py
+Legacy helper; prefer app.db.seed_demo for fresh demo data.
 """
 import os
 import sys

@@ -7,7 +7,18 @@ from sqlalchemy import func, and_, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_admin
-from app.models import User, Provider, Service, Booking, Report, AuditLog, Review
+from app.models import (
+    User,
+    Provider,
+    ProviderProfile,
+    ProviderService,
+    GlobalService,
+    Service,
+    Booking,
+    Report,
+    AuditLog,
+    Review,
+)
 from app import schemas
 
 router = APIRouter()
@@ -149,6 +160,7 @@ def list_providers_admin(
             User.name.label("name"),
             User.email.label("email"),
             Provider.is_verified.label("approved"),
+            Provider.is_suspended.label("is_suspended"),
             review_agg_subq.c.avg_rating,
             review_agg_subq.c.total_reviews,
         )
@@ -171,6 +183,7 @@ def list_providers_admin(
                 "name": r.name,
                 "email": r.email,
                 "approved": approved_val,
+                "is_suspended": getattr(r, "is_suspended", None),
                 "avg_rating": avg_rating_val,
                 "total_reviews": total_reviews_val,
             }
@@ -180,9 +193,10 @@ def list_providers_admin(
 
 
 @router.patch("/providers/{provider_id}/status", response_model=schemas.AdminProviderStatusOut)
+@router.put("/providers/{provider_id}/status", response_model=schemas.AdminProviderStatusOut)
 def update_provider_status(
     provider_id: int,
-    payload: dict,
+    payload: schemas.AdminProviderStatusUpdate,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
@@ -190,17 +204,36 @@ def update_provider_status(
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    approved = payload.get("approved")
-    if approved is None:
-        raise HTTPException(status_code=400, detail="approved is required")
+    status_value = payload.status
+    # Backwards compatible toggle via approved boolean
+    if status_value is None and payload.approved is not None:
+        status_value = "approved" if payload.approved else "pending"
 
-    provider.is_verified = bool(approved)
+    if status_value == "approved":
+        provider.is_verified = True
+        provider.is_suspended = False
+    elif status_value == "suspended":
+        provider.is_suspended = True
+        provider.is_verified = False
+    elif status_value == "pending":
+        provider.is_verified = None
+        provider.is_suspended = False
+    else:
+        raise HTTPException(status_code=400, detail="status must be approved, suspended, or pending")
+
     db.commit()
     db.refresh(provider)
 
+    resolved_status = (
+        "suspended"
+        if provider.is_suspended
+        else ("approved" if provider.is_verified else "pending")
+    )
     return {
         "provider_id": provider.id,
         "approved": provider.is_verified,
+        "is_suspended": provider.is_suspended,
+        "status": resolved_status,
     }
 
 
@@ -240,82 +273,187 @@ def reset_provider_status(
     return {"id": provider.id, "approved": provider.is_verified}
 
 
-@router.get("/providers/{provider_id}/profile")
-def get_provider_profile(
-    provider_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin),
-):
-    provider = (
-        db.query(Provider, User)
-        .join(User, Provider.user_id == User.id)
-        .filter(Provider.id == provider_id)
-        .first()
+def _rating_summary(db: Session, provider_id: int) -> dict:
+    avg_rating, total_reviews = (
+        db.query(func.avg(Review.rating), func.count(Review.id))
+        .join(Service, Review.service_id == Service.id)
+        .filter(Service.provider_id == provider_id)
+        .one()
     )
-    if not provider:
-        raise HTTPException(status_code=404, detail="Provider not found")
-
-    provider_obj, user_obj = provider
-    services = db.query(Service).filter(Service.provider_id == provider_id).all()
-    services_out = [
-        {
-            "id": s.id,
-            "title": s.title,
-            "category": s.category,
-            "price": float(s.price) if s.price is not None else None,
-            "approved": s.approved,
-        }
-        for s in services
-    ]
-
     return {
-        "id": provider_obj.id,
-        "name": user_obj.name,
-        "email": user_obj.email,
-        "approved": provider_obj.is_verified if provider_obj.is_verified is not None else None,
-        "bio": provider_obj.bio,
-        "services": services_out,
+        "avg_rating": float(avg_rating) if avg_rating is not None else None,
+        "total_reviews": int(total_reviews or 0),
     }
 
-@router.get("/providers/{provider_id}")
+
+def _booking_summary(db: Session, provider_id: int) -> dict:
+    rows = (
+        db.query(Booking.status, func.count(Booking.id))
+        .filter(Booking.provider_id == provider_id)
+        .group_by(Booking.status)
+        .all()
+    )
+    counts = {status: count for status, count in rows}
+    return {
+        "total": sum(counts.values()),
+        "pending": int(counts.get("pending", 0)),
+        "accepted": int(counts.get("accepted", 0)),
+        "completed": int(counts.get("completed", 0)),
+        "cancelled": int(counts.get("cancelled", 0)),
+        "rejected": int(counts.get("rejected", 0)),
+    }
+
+
+def _provider_earnings(db: Session, provider_id: int) -> dict:
+    total_earnings = (
+        db.query(func.coalesce(func.sum(Booking.price), 0))
+        .filter(Booking.provider_id == provider_id, Booking.status == "accepted")
+        .scalar()
+        or 0
+    )
+    accepted_bookings = (
+        db.query(func.count(Booking.id))
+        .filter(Booking.provider_id == provider_id, Booking.status == "accepted")
+        .scalar()
+        or 0
+    )
+    return {
+        "total_earnings": float(total_earnings),
+        "accepted_bookings": int(accepted_bookings),
+    }
+
+
+@router.get("/providers/{provider_id}", response_model=schemas.AdminProviderDetailOut)
 def get_provider_detail(
     provider_id: int,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    provider = (
+    row = (
         db.query(Provider, User)
         .join(User, Provider.user_id == User.id)
         .filter(Provider.id == provider_id)
         .first()
     )
-    if not provider:
+    if not row:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    provider_obj, user_obj = provider
-    services = (
-        db.query(Service)
-        .filter(Service.provider_id == provider_id)
-        .all()
-    )
-    services_out = [
-        {
-            "id": s.id,
-            "title": s.title,
-            "category": s.category,
-            "price": float(s.price) if s.price is not None else None,
-            "approved": s.approved,
-        }
-        for s in services
-    ]
+    provider_obj, user_obj = row
+    profile = db.query(ProviderProfile).filter(ProviderProfile.provider_id == provider_id).first()
 
-    return {
+    services_count = (
+        db.query(func.count(ProviderService.id))
+        .filter(ProviderService.provider_id == provider_id)
+        .scalar()
+        or 0
+    )
+    active_services = (
+        db.query(func.count(ProviderService.id))
+        .filter(ProviderService.provider_id == provider_id, ProviderService.is_active == True)  # noqa: E712
+        .scalar()
+        or 0
+    )
+
+    detail = {
         "id": provider_obj.id,
+        "user_id": provider_obj.user_id,
         "name": user_obj.name,
         "email": user_obj.email,
-        "bio": provider_obj.bio,
         "approved": provider_obj.is_verified if provider_obj.is_verified is not None else None,
-        "services": services_out,
+        "is_suspended": provider_obj.is_suspended,
+        "profile": {
+            "business_name": (profile.business_name if profile else provider_obj.business_name),
+            "phone": profile.phone if profile else None,
+            "bio": (profile.bio if profile else provider_obj.bio),
+        },
+        "rating": _rating_summary(db, provider_id),
+        "bookings": _booking_summary(db, provider_id),
+        "services_count": int(services_count),
+        "active_services": int(active_services),
+        "earnings": _provider_earnings(db, provider_id),
+    }
+    return detail
+
+
+@router.get(
+    "/providers/{provider_id}/services",
+    response_model=schemas.AdminProviderServicesResponse,
+)
+def list_provider_services_admin(
+    provider_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    provider_exists = db.query(Provider.id).filter(Provider.id == provider_id).first()
+    if not provider_exists:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    rows = (
+        db.query(
+            ProviderService.id.label("id"),
+            ProviderService.provider_id.label("provider_id"),
+            ProviderService.service_id.label("global_service_id"),
+            ProviderService.price,
+            ProviderService.service_radius_km,
+            ProviderService.experience_years,
+            ProviderService.is_active,
+            ProviderService.created_at,
+            GlobalService.title,
+            GlobalService.category,
+        )
+        .join(GlobalService, GlobalService.id == ProviderService.service_id)
+        .filter(ProviderService.provider_id == provider_id)
+        .all()
+    )
+    items = [
+        {
+            "id": r.id,
+            "provider_id": r.provider_id,
+            "global_service_id": r.global_service_id,
+            "title": r.title,
+            "category": r.category,
+            "price": float(r.price) if r.price is not None else None,
+            "service_radius_km": float(r.service_radius_km) if r.service_radius_km is not None else None,
+            "experience_years": float(r.experience_years) if r.experience_years is not None else None,
+            "is_active": bool(r.is_active),
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+    return {"items": items, "count": len(items)}
+
+
+@router.put(
+    "/services/{service_id}/status",
+    response_model=schemas.AdminProviderServiceOut,
+)
+def update_provider_service_status(
+    service_id: int,
+    payload: schemas.AdminProviderServiceStatusUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    ps = db.query(ProviderService).filter(ProviderService.id == service_id).first()
+    if not ps:
+        raise HTTPException(status_code=404, detail="Provider service not found")
+
+    ps.is_active = payload.is_active
+    db.commit()
+    db.refresh(ps)
+
+    gsvc = db.query(GlobalService).filter(GlobalService.id == ps.service_id).first()
+
+    return {
+        "id": ps.id,
+        "provider_id": ps.provider_id,
+        "global_service_id": ps.service_id,
+        "title": gsvc.title if gsvc else "",
+        "category": gsvc.category if gsvc else None,
+        "price": float(ps.price) if ps.price is not None else None,
+        "service_radius_km": float(ps.service_radius_km) if ps.service_radius_km is not None else None,
+        "experience_years": float(ps.experience_years) if ps.experience_years is not None else None,
+        "is_active": bool(ps.is_active),
+        "created_at": ps.created_at.isoformat() if ps.created_at else None,
     }
 
 
@@ -590,22 +728,6 @@ def get_flagged_services(
     """Get all flagged services"""
     services = db.query(Service).filter(Service.flagged == True).all()
     return services
-
-
-@router.get("/services", response_model=List[schemas.ServiceOut])
-def list_services_admin(
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin),
-):
-    return db.query(Service).all()
-
-
-@router.get("/services", response_model=List[schemas.ServiceOut])
-def list_services_admin(
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin),
-):
-    return db.query(Service).all()
 
 
 @router.put("/services/{service_id}/approve")

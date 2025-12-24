@@ -17,7 +17,8 @@ export default function AdminDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileData, setProfileData] = useState(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [modalError, setModalError] = useState("");
+  const [actionLoadingId, setActionLoadingId] = useState(null);
   const [resetLoading, setResetLoading] = useState(false);
   const [serviceActionId, setServiceActionId] = useState(null);
 
@@ -67,44 +68,56 @@ export default function AdminDashboard() {
     setIsModalOpen(true);
     setProfileLoading(true);
     setProfileData(null);
+    setModalError("");
     try {
-      const data = await adminApi.providerDetail(provider.id);
-      setProfileData(data);
+      const [detail, servicesResp] = await Promise.all([
+        adminApi.providerDetail(provider.id),
+        adminApi.providerServices(provider.id),
+      ]);
+      setProfileData({ ...detail, services: servicesResp?.items ?? [] });
     } catch (e) {
       console.error("Provider detail load failed", e);
-      showToast(e.response?.data?.detail || "Failed to load provider", "error");
+      setModalError(e.response?.data?.detail || e.message || "Failed to load provider");
       setIsModalOpen(false);
     } finally {
       setProfileLoading(false);
     }
   };
 
-  const handleProviderStatus = async (providerId, approved) => {
+  const handleProviderStatus = async (providerId, status) => {
+    setActionLoadingId(providerId);
     try {
-      await adminApi.updateProviderStatus(providerId, approved);
-      setProviders((prev) =>
-        prev.map((p) =>
-          p.id === providerId ? { ...p, approved } : p
-        )
-      );
-      showToast(approved ? "Provider approved" : "Provider rejected", approved ? "success" : "warning");
+      await adminApi.updateProviderStatus(providerId, status);
+      const refreshed = await adminApi.providers();
+      setProviders(refreshed || []);
+      if (selectedProvider?.id === providerId) {
+        await openProfile({ id: providerId });
+      }
+      const msg =
+        status === "approved"
+          ? "Provider approved"
+          : status === "suspended"
+          ? "Provider suspended"
+          : "Provider set to pending";
+      showToast(msg, "success");
     } catch (e) {
       console.error("Provider status update failed", e);
       showToast(e.response?.data?.detail || "Action failed", "error");
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
   const handleProviderReset = async (providerId) => {
     if (!window.confirm("Reset this provider back to pending?")) return;
-    console.log("Reset provider id", providerId);
     setResetLoading(true);
     try {
       await adminApi.resetProvider(providerId);
-      setProviders((prev) =>
-        prev.map((p) =>
-          p.id === providerId ? { ...p, approved: null } : p
-        )
-      );
+      const refreshed = await adminApi.providers();
+      setProviders(refreshed || []);
+      if (selectedProvider?.id === providerId) {
+        await openProfile({ id: providerId });
+      }
       showToast("Provider reset to pending", "success");
     } catch (e) {
       console.error("Provider reset failed", e);
@@ -114,87 +127,22 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleApprove = async (providerId) => {
-    setActionLoading(true);
-    try {
-      await adminApi.approveProvider(providerId);
-      setProfileData((prev) => (prev ? { ...prev, approved: true } : prev));
-      setProviders((prev) => prev.map((p) => (p.id === providerId ? { ...p, approved: true } : p)));
-      showToast("Provider approved", "success");
-      setIsModalOpen(false);
-    } catch (e) {
-      console.error("Approve failed", e);
-      showToast(e.response?.data?.detail || "Action failed", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleReject = async (providerId) => {
-    setActionLoading(true);
-    try {
-      await adminApi.rejectProvider(providerId);
-      setProfileData((prev) => (prev ? { ...prev, approved: false } : prev));
-      setProviders((prev) => prev.map((p) => (p.id === providerId ? { ...p, approved: false } : p)));
-      showToast("Provider rejected", "success");
-      setIsModalOpen(false);
-    } catch (e) {
-      console.error("Reject failed", e);
-      showToast(e.response?.data?.detail || "Action failed", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleSuspend = async (providerId) => {
-    setActionLoading(true);
-    try {
-      await adminApi.suspendProvider(providerId);
-      setProfileData((prev) => (prev ? { ...prev, is_active: false } : prev));
-      showToast("Provider suspended", "success");
-      setIsModalOpen(false);
-    } catch (e) {
-      console.error("Suspend failed", e);
-      showToast(e.response?.data?.detail || "Action failed", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUnsuspend = async (providerId) => {
-    setActionLoading(true);
-    try {
-      await adminApi.activateProvider(providerId);
-      setProfileData((prev) => (prev ? { ...prev, is_active: true } : prev));
-      showToast("Provider unsuspended", "success");
-      setIsModalOpen(false);
-    } catch (e) {
-      console.error("Unsuspend failed", e);
-      showToast(e.response?.data?.detail || "Action failed", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleServiceApproveReject = async (serviceId, approve) => {
+  const handleServiceToggle = async (serviceId, desiredState) => {
     if (!profileData) return;
+    if (!desiredState && !window.confirm("Disable this service?")) return;
     setServiceActionId(serviceId);
     try {
-      if (approve) {
-        await adminApi.approveService(serviceId);
-      } else {
-        await adminApi.rejectService(serviceId);
-      }
+      const updated = await adminApi.updateProviderServiceStatus(serviceId, desiredState);
       setProfileData((prev) => {
         if (!prev) return prev;
-        const updated = (prev.services || []).map((s) =>
-          s.id === serviceId ? { ...s, approved: approve } : s
+        const updatedServices = (prev.services || []).map((s) =>
+          s.id === serviceId ? { ...s, ...updated } : s
         );
-        return { ...prev, services: updated };
+        return { ...prev, services: updatedServices };
       });
-      showToast(approve ? "Service approved" : "Service rejected", "success");
+      showToast(desiredState ? "Service enabled" : "Service disabled", "success");
     } catch (e) {
-      console.error("Service approval failed", e);
+      console.error("Service toggle failed", e);
       showToast(e.response?.data?.detail || e.message || "Action failed", "error");
     } finally {
       setServiceActionId(null);
@@ -271,22 +219,33 @@ export default function AdminDashboard() {
                     })()}
                   </td>
                   <td className="py-2 pr-4">
-                    {p.approved === null ? (
-                      <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {p.approved !== true && !p.is_suspended && (
                         <button
                           className="px-3 py-1 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200"
-                          onClick={() => handleProviderStatus(p.id, true)}
+                          onClick={() => handleProviderStatus(p.id, "approved")}
                         >
                           Approve
                         </button>
+                      )}
+                      {p.approved === true && !p.is_suspended && (
                         <button
-                          className="px-3 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200"
-                          onClick={() => handleProviderStatus(p.id, false)}
+                          disabled={actionLoadingId === p.id}
+                          className="px-3 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-60"
+                          onClick={() => handleProviderStatus(p.id, "suspended")}
                         >
-                          Reject
+                          {actionLoadingId === p.id ? "Saving..." : "Suspend"}
                         </button>
-                      </div>
-                    ) : p.approved === false ? (
+                      )}
+                      {p.is_suspended && (
+                        <button
+                          disabled={actionLoadingId === p.id}
+                          className="px-3 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-60"
+                          onClick={() => handleProviderStatus(p.id, "approved")}
+                        >
+                          {actionLoadingId === p.id ? "Saving..." : "Resume"}
+                        </button>
+                      )}
                       <button
                         disabled={resetLoading}
                         className="px-3 py-1 text-xs rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200 disabled:opacity-60"
@@ -294,9 +253,7 @@ export default function AdminDashboard() {
                       >
                         {resetLoading ? "Loading..." : "Reset"}
                       </button>
-                    ) : (
-                      <span className="text-xs text-slate-500">--</span>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -318,8 +275,12 @@ export default function AdminDashboard() {
           onClose={() => setIsModalOpen(false)}
           loading={profileLoading}
           data={profileData}
+          error={modalError}
           serviceActionId={serviceActionId}
-          onServiceAction={handleServiceApproveReject}
+          onServiceAction={handleServiceToggle}
+          onProviderStatusChange={handleProviderStatus}
+          actionLoadingId={actionLoadingId}
+          selectedProviderId={selectedProvider?.id}
         />
       )}
     </div>

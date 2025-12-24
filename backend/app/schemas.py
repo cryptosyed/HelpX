@@ -18,6 +18,15 @@ class UserCreate(BaseModel):
             raise ValueError('Invalid email format')
         return v.lower()
 
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        return v.lower()
+
 class UserOut(BaseModel):
     id: int
     email: str
@@ -281,13 +290,97 @@ class AdminProviderOut(BaseModel):
     name: str
     email: str
     approved: Optional[bool] = None
+    is_suspended: Optional[bool] = None
     avg_rating: Optional[float] = None
     total_reviews: int
 
 
 class AdminProviderStatusOut(BaseModel):
     provider_id: int
-    approved: bool
+    approved: Optional[bool]
+    is_suspended: Optional[bool] = None
+    status: Optional[str] = None
+
+
+class AdminProviderStatusUpdate(BaseModel):
+    status: Optional[str] = None  # approved|suspended|pending
+    approved: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_status(self):
+        if self.status is None and self.approved is None:
+            raise ValueError("status or approved is required")
+        if self.status and self.status not in {"approved", "suspended", "pending"}:
+            raise ValueError("status must be one of approved, suspended, pending")
+        return self
+
+
+class AdminProviderProfile(BaseModel):
+    business_name: Optional[str] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+
+
+class AdminProviderRatingSummary(BaseModel):
+    avg_rating: Optional[float] = None
+    total_reviews: int = 0
+
+
+class AdminProviderBookingSummary(BaseModel):
+    total: int
+    pending: int
+    accepted: int
+    completed: int
+    cancelled: int
+    rejected: int
+
+
+class AdminProviderEarnings(BaseModel):
+    total_earnings: float = 0
+    accepted_bookings: int = 0
+
+
+class AdminProviderDetailOut(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    email: str
+    approved: Optional[bool] = None
+    is_suspended: Optional[bool] = None
+    profile: Optional[AdminProviderProfile] = None
+    rating: AdminProviderRatingSummary
+    bookings: AdminProviderBookingSummary
+    services_count: int
+    active_services: int
+    earnings: Optional[AdminProviderEarnings] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminProviderServiceOut(BaseModel):
+    id: int  # provider_service id
+    provider_id: int
+    global_service_id: int
+    title: str
+    category: Optional[str] = None
+    price: Optional[float] = None
+    service_radius_km: Optional[float] = None
+    experience_years: Optional[float] = None
+    is_active: bool
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminProviderServiceStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class AdminProviderServicesResponse(BaseModel):
+    items: List[AdminProviderServiceOut]
+    count: int
 
 
 class AdminAnalytics(BaseModel):

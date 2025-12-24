@@ -5,6 +5,7 @@ from fastapi.security import HTTPBearer
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings 
 from app.api import auth, bookings, services, admin, user, provider, match, reports, reviews, provider_services
 from app.api.provider import earnings_router
 from app.db.schema_guard import ensure_schema, schema_health
@@ -39,6 +40,7 @@ def startup_log() -> None:
     Attempt to ensure tables exist; log failures without crashing so app boots.
     """
     logger.info("HelpX API starting up")
+    logger.info(f"DATABASE_URL in use: {settings.DATABASE_URL}")
     try:
         from app.db.session import engine
         import app.models  # noqa: F401

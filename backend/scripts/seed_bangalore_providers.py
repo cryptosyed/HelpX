@@ -1,10 +1,8 @@
 """
-DEV/TEST SEED
+DEV/TEST SEED (legacy)
 Resets provider-related data and seeds Bangalore providers/services
 for end-to-end booking flow using GlobalService + ProviderService.
-
-Run (Docker):
-  docker compose exec backend python /app/scripts/seed_bangalore_providers.py
+Prefer using app.db.seed_demo for current flows.
 """
 
 from typing import List, Dict

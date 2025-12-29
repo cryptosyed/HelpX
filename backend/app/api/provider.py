@@ -16,6 +16,7 @@ from app.models import (
     Booking,
     ProviderPayoutSettings,
     Review,
+    Service,
 )
 from app.models.provider_service import ProviderService
 
@@ -78,8 +79,9 @@ def get_provider_profile(
 def upsert_provider_profile(
     payload: schemas.ProviderProfileBase,
     db: Session = Depends(get_db),
-    provider: Provider = Depends(get_current_provider),
+    current_user: User = Depends(get_current_provider),
 ):
+    provider = get_provider_from_user(current_user, db)
     profile = (
         db.query(ProviderProfile)
         .filter(ProviderProfile.provider_id == provider.id)
@@ -163,66 +165,15 @@ def list_provider_services(
     return services
 
 
-@router.put("/services/{service_id}", response_model=schemas.ServiceOut)
-def update_provider_service(
-    service_id: int,
-    svc: schemas.ServiceCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_provider),
-):
-    provider = get_provider_from_user(current_user, db)
-    db_svc = (
-        db.query(Service)
-        .filter(Service.id == service_id, Service.provider_id == provider.id)
-        .first()
-    )
-    if not db_svc:
-        raise HTTPException(status_code=404, detail="Service not found")
-    if db_svc.approved:
-        raise HTTPException(status_code=403, detail="Approved services cannot be edited")
-
-    db_svc.title = svc.title
-    db_svc.description = svc.description
-    db_svc.category = svc.category
-    db_svc.price = svc.price
-    db_svc.image_url = svc.image_url or db_svc.image_url or "/images/service-placeholder.jpg"
-    db.add(db_svc)
-    db.commit()
-
-    if svc.lat is not None and svc.lon is not None:
-        try:
-            db.execute(
-                text(
-                    "UPDATE services SET location = ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) WHERE id = :id"
-                ),
-                {"lon": svc.lon, "lat": svc.lat, "id": db_svc.id},
-            )
-            db.commit()
-        except Exception as exc:  # pragma: no cover - optional enhancement
-            logger.warning("Failed to set location for service %s: %s", db_svc.id, exc)
-
-    return api_utils.service_to_schema(db, db_svc)
-
-
-@router.delete("/services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_provider_service(
-    service_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_provider),
-):
-    provider = get_provider_from_user(current_user, db)
-    db_svc = (
-        db.query(Service)
-        .filter(Service.id == service_id, Service.provider_id == provider.id)
-        .first()
-    )
-    if not db_svc:
-        raise HTTPException(status_code=404, detail="Service not found")
-    if db_svc.approved:
-        raise HTTPException(status_code=403, detail="Approved services cannot be deleted")
-    db.delete(db_svc)
-    db.commit()
-    return
+# Legacy Service endpoints - commented out to avoid conflict with provider_services.py
+# Use /provider/services/{provider_service_id} from provider_services router instead
+# @router.put("/services/{service_id}", response_model=schemas.ServiceOut)
+# def update_provider_service(...):
+#     ...
+#
+# @router.delete("/services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
+# def delete_provider_service(...):
+#     ...
 
 
 # ========== PROVIDER RATING SUMMARY ==========

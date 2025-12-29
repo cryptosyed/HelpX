@@ -13,6 +13,8 @@ from sqlalchemy import func
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+DEFAULT_RADIUS_KM = 10.0
+
 
 def _booking_to_schema(db: Session, booking: Booking) -> schemas.BookingOut:
     service: Optional[ServiceModel] = (
@@ -125,7 +127,39 @@ def create_booking(
     if not gsvc:
         raise HTTPException(status_code=404, detail="Global service not found")
 
+    from app.api.match import find_best_provider
+
     provider_id = payload.provider_id
+
+    # AUTO-ASSIGN PROVIDER USING GEO-LOCATION
+    if not provider_id:
+        if payload.user_lat is None or payload.user_lon is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Location is required to auto-assign provider",
+            )
+
+        match = find_best_provider(
+            db=db,
+            global_service_id=gsvc.id,
+            user_lat=payload.user_lat,
+            user_lon=payload.user_lon,
+            user=current_user,
+        )
+
+        if not match:
+            raise HTTPException(
+                status_code=404,
+                detail="No providers available near your location",
+            )
+
+        provider_id = match.provider_id
+
+        if not provider_id:
+            raise HTTPException(
+                status_code=404,
+                detail="No providers available near your location",
+            )
     if provider_id:
         ps = (
             db.query(ProviderService)
@@ -331,4 +365,37 @@ def _audit(db: Session, actor_id: int, action: str, target_type: str, target_id:
     db.add(log)
     db.commit()
 
+# def find_best_provider_for_service(
+#     db: Session,
+#     service_id: int,
+#     user_lat: float,
+#     user_lon: float,
+#     radius_km: float = DEFAULT_RADIUS_KM,
+# ):
+#     user_point = func.ST_SetSRID(func.ST_MakePoint(user_lon, user_lat), 4326)
+#     radius_m = radius_km * 1000
+
+#     rows = (
+#         db.query(
+#             Service.provider_id,
+#             func.ST_Distance(Service.location, user_point).label("distance_m"),
+#         )
+#         .join(Provider, Provider.id == Service.provider_id)
+#         .filter(
+#             Service.id == service_id,
+#             Service.location.isnot(None),
+#             Provider.is_active == True,
+#             Provider.is_verified == True,
+#             Provider.is_suspended == False,
+#             func.ST_DWithin(Service.location, user_point, radius_m),
+#         )
+#         .order_by("distance_m")
+#         .limit(1)
+#         .all()
+#     )
+
+#     if not rows:
+#         return None
+
+#     return rows[0].provider_id
 

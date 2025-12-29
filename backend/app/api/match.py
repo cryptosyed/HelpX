@@ -12,7 +12,15 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
-from app.models import Booking, Provider, Report, Service, User
+from app.models import (
+    Booking,
+    Provider,
+    Report,
+    Service,
+    User,
+    ProviderService,
+    GlobalService,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -56,6 +64,7 @@ def _validate_location(lat: Optional[float], lon: Optional[float]) -> None:
     response_model=schemas.ProviderMatchResponse,
     summary="Rank providers near a job location",
 )
+
 def match_providers(
     service_id: int = Query(..., gt=0),
     user_lat: float = Query(..., description="Latitude of the job/request"),
@@ -73,6 +82,15 @@ def match_providers(
     weighted scores in Python for explainability and deterministic ordering.
     """
     _validate_location(user_lat, user_lon)
+    gsvc = (
+        db.query(GlobalService)
+        .filter(GlobalService.id == service_id)
+        .first()
+    )
+
+    if not gsvc:
+        raise HTTPException(status_code=404, detail="Global service not found")
+
     algorithm = algorithm.lower()
     if algorithm not in SUPPORTED_ALGORITHMS:
         raise HTTPException(status_code=400, detail="Unsupported algorithm")
@@ -108,22 +126,37 @@ def match_providers(
             func.coalesce(workload_subq.c.active_bookings, 0).label("active_bookings"),
         )
         .join(Provider, Provider.id == Service.provider_id)
+        .join(
+            ProviderService,
+            ProviderService.provider_id == Provider.id,
+        )
         .outerjoin(workload_subq, workload_subq.c.provider_id == Provider.id)
         .filter(
-            Service.category == service.category,
+            ProviderService.service_id == gsvc.id,
+            ProviderService.is_active == True,
+
             Service.location.isnot(None),
-            Service.approved == True,  # noqa: E712
-            Provider.is_active == True,  # noqa: E712
-            Provider.is_verified == True,  # noqa: E712
-            Provider.is_suspended == False,  # noqa: E712
-            func.ST_DWithin(Service.location, user_point, radius_m),
+            Service.approved == True,
+
+            Provider.is_active == True,
+            Provider.is_verified == True,
+            Provider.is_suspended == False,
+
+            func.ST_DWithin(
+                Service.location,
+                user_point,
+                func.LEAST(
+                    func.coalesce(ProviderService.service_radius_km, radius_km),
+                    radius_km
+                ) * 1000
+            ),
         )
     )
-
-    # Prevent providers from matching their own services (self-booking)
     if current_user.provider:
         base_query = base_query.filter(Provider.id != current_user.provider.id)
 
+    base_query = base_query.distinct(Provider.id)
+    
     start = time.perf_counter()
     rows = base_query.all()
     elapsed_ms = (time.perf_counter() - start) * 1000
@@ -146,7 +179,7 @@ def match_providers(
             total=0,
             top_n=top_n,
             radius_km=radius_km,
-            criteria={"category": service.category},
+            criteria={"category": gsvc.category},
             debug=schemas.MatchDebug(
                 elapsed_ms=elapsed_ms,
                 candidate_count=0,
@@ -275,6 +308,38 @@ def match_providers(
         ),
     )
 
+def find_best_provider(
+    db: Session,
+    global_service_id: int,
+    user_lat: float,
+    user_lon: float,
+    user: User,
+) -> Optional[schemas.ProviderMatchResult]:
+
+    gsvc = (
+        db.query(GlobalService)
+        .filter(GlobalService.id == global_service_id)
+        .first()
+    )
+    if not gsvc:
+        return None
+
+    response = match_providers(
+        service_id=gsvc.id,
+        user_lat=user_lat,
+        user_lon=user_lon,
+        radius_km=DEFAULT_RADIUS_KM,
+        top_n=1,
+        algorithm="trust_hybrid",
+        debug=False,
+        db=db,
+        current_user=user,
+    )
+
+    if not response.items:
+        return None
+
+    return response.items[0]
 
 def _record_match_stats(algorithm: str, best: schemas.ProviderMatchResult, candidate_count: int) -> None:
     stats = MATCH_STATS.setdefault(algorithm, _init_stats()[algorithm])

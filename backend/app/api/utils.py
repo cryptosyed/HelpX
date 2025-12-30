@@ -5,6 +5,19 @@ from app import schemas
 from app.models import Service as ServiceModel
 
 
+def ensure_description(title: str, category: str | None, description: str | None) -> str:
+    """
+    Return the provided description when present; otherwise synthesize
+    a short fallback using the service title and category.
+    """
+    if description and description.strip():
+        return description
+
+    title_text = (title or "service").strip() or "service"
+    category_text = (category or "our services").strip() or "our services"
+    return f"Professional {title_text} service under {category_text}. Book verified providers near you."
+
+
 def service_to_schema(db: Session, service: ServiceModel) -> schemas.ServiceOut:
     lat_val, lon_val = None, None
     try:
@@ -25,7 +38,7 @@ def service_to_schema(db: Session, service: ServiceModel) -> schemas.ServiceOut:
         id=service.id,
         provider_id=service.provider_id,
         title=service.title,
-        description=service.description,
+        description=ensure_description(service.title, service.category, service.description),
         category=service.category,
         price=float(service.price) if service.price is not None else None,
         lat=lat_val,

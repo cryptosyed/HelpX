@@ -127,6 +127,8 @@ export default function ServiceDetail() {
     service?.lon != null &&
     service.lat !== "" &&
     service.lon !== "";
+  const descriptionText = (service?.description || "").trim();
+  const aboutDescription = descriptionText || "Professional service provided by verified local experts.";
 
   if (loading) {
     return (
@@ -184,12 +186,34 @@ export default function ServiceDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <section className="lg:col-span-2 glass rounded-2xl p-7 border border-slate-200/50 shadow-xl">
-          <h3 className="text-2xl font-bold mb-4 text-slate-800">Description</h3>
-          <p className="text-slate-700 leading-relaxed mb-6 whitespace-pre-wrap">
-            {service.description || "No description provided."}
-          </p>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-2xl font-bold mb-3 text-slate-800">About this service</h3>
+              <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                {aboutDescription}
+              </p>
+            </div>
 
-          <div className="flex justify-between gap-4 text-sm text-slate-600 pt-4 border-t border-slate-200 mb-4">
+            <div>
+              <h3 className="text-2xl font-bold mb-3 text-slate-800">How it works</h3>
+              <ol className="space-y-2 text-slate-700 list-decimal list-inside">
+                <li>Request a booking</li>
+                <li>Nearby verified providers are notified</li>
+                <li>First provider to accept gets assigned</li>
+              </ol>
+            </div>
+
+            <div>
+              <h3 className="text-2xl font-bold mb-3 text-slate-800">Why choose this service</h3>
+              <ul className="space-y-1 text-slate-700 list-disc list-inside">
+                <li>Verified providers</li>
+                <li>Transparent pricing</li>
+                <li>Secure payments</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="flex justify-between gap-4 text-sm text-slate-600 pt-4 border-t border-slate-200 mb-4 mt-6">
             <span>Global service</span>
             <strong className="text-slate-800">#{service.id}</strong>
           </div>

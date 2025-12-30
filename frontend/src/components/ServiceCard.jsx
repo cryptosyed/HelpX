@@ -42,6 +42,15 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
 
     const disableActions = isLoading;
 
+    const rawDescription = (service.description || "").trim();
+    const fallbackDescription = "Professional service provided by verified local experts.";
+    const baseDescription = rawDescription || fallbackDescription;
+    const maxDescLength = 120;
+    const shouldTruncate = baseDescription.length > maxDescLength;
+    const displayDescription = shouldTruncate
+        ? `${baseDescription.slice(0, maxDescLength).trimEnd()}…`
+        : baseDescription;
+
     return (
         <article
             className="service-card relative glass rounded-2xl p-0 border border-slate-200/50 shadow-md overflow-hidden reveal-up flex flex-col"
@@ -73,7 +82,7 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
                     ) : null}
                 </div>
                 <p className="text-[0.9rem] text-[#6b7280] leading-[1.5] flex-1 m-0">
-                    {service.description || "No description."}
+                    {displayDescription}
                 </p>
 
                 <div className="text-xs text-slate-500" aria-label="Location metadata">

@@ -17,6 +17,16 @@ from app.schemas.service import (
 router = APIRouter()
 
 
+def _generate_global_description(title: str, category: str) -> str:
+    """Build a stored description when none is provided."""
+    title_text = (title or "service").strip() or "service"
+    category_text = (category or "our services").strip() or "our services"
+    return (
+        f"Expert {title_text} services under {category_text}. "
+        "Trusted professionals, flexible scheduling, and reliable support."
+    )
+
+
 @router.get("/global", response_model=list[schemas.GlobalServiceOut])
 def list_global_services(db: Session = Depends(get_db)):
     """
@@ -41,7 +51,7 @@ def get_global_service(service_id: int, db: Session = Depends(get_db)):
         id=gs.id,
         provider_id=0,
         title=gs.title,
-        description=gs.description,
+        description=api_utils.ensure_description(gs.title, gs.category, gs.description),
         category=gs.category,
         price=gs.base_price,
         lat=None,
@@ -199,10 +209,13 @@ def admin_create_global_service(
     current_user=Depends(get_current_user),
 ):
     _require_admin(current_user)
+    desc = payload.description
+    if not desc or not desc.strip():
+        desc = _generate_global_description(payload.title, payload.category)
     svc = GlobalService(
         title=payload.title,
         category=payload.category,
-        description=payload.description,
+        description=desc,
         base_price=payload.base_price,
         is_active=payload.is_active if payload.is_active is not None else True,
     )
@@ -228,7 +241,15 @@ def admin_update_global_service(
     if payload.category is not None:
         svc.category = payload.category
     if payload.description is not None:
-        svc.description = payload.description
+        incoming_desc = payload.description
+        if not incoming_desc or not incoming_desc.strip():
+            svc.description = _generate_global_description(svc.title, svc.category)
+        else:
+            svc.description = incoming_desc
+    else:
+        # If description was previously empty, backfill it using current title/category
+        if not svc.description or not svc.description.strip():
+            svc.description = _generate_global_description(svc.title, svc.category)
     if payload.base_price is not None:
         svc.base_price = payload.base_price
     if payload.is_active is not None:

@@ -4,6 +4,21 @@ import { Link } from "react-router-dom";
 export default function ServiceCard({ service, onShowMap, index = 0, isLoading = false, avg_rating, total_reviews }) {
     const cardRef = useRef(null);
 
+    // Category image mapping using reliable placeholder service
+    const getCategoryImage = (category) => {
+        const cat = (category || "").toLowerCase();
+        // Use loremflickr for reliable category-based real images
+        if (cat.includes("clean")) return "https://loremflickr.com/800/600/cleaning";
+        if (cat.includes("repair") || cat.includes("fix")) return "https://loremflickr.com/800/600/repair,tools";
+        if (cat.includes("paint")) return "https://loremflickr.com/800/600/painting,house";
+        if (cat.includes("mov") || cat.includes("deliver")) return "https://loremflickr.com/800/600/delivery,truck";
+        if (cat.includes("plumb")) return "https://loremflickr.com/800/600/plumbing";
+        if (cat.includes("electr")) return "https://loremflickr.com/800/600/electrician";
+        if (cat.includes("well") || cat.includes("health")) return "https://loremflickr.com/800/600/wellness,yoga";
+        // Default fallback
+        return "https://loremflickr.com/800/600/service,work";
+    };
+
     useEffect(() => {
         const observer = new IntersectionObserver(
             (entries) => {
@@ -34,81 +49,85 @@ export default function ServiceCard({ service, onShowMap, index = 0, isLoading =
     const priceLabel =
         basePrice != null
             ? `₹${Number(basePrice).toLocaleString("en-IN")}`
-            : "—";
+            : "Transparent pricing";
 
     const hasCoords = service.lat != null && service.lon != null;
-    const latLabel = hasCoords ? Number(service.lat).toFixed(4) : null;
-    const lonLabel = hasCoords ? Number(service.lon).toFixed(4) : null;
-
     const disableActions = isLoading;
 
+    // Use provided image or fallback based on category
+    const imageUrl = service.image_url || getCategoryImage(service.category);
+
     const rawDescription = (service.description || "").trim();
-    const fallbackDescription = "Professional service provided by verified local experts.";
+    const fallbackDescription = "Professional and reliable service provided by verified experts.";
     const baseDescription = rawDescription || fallbackDescription;
-    const maxDescLength = 120;
-    const shouldTruncate = baseDescription.length > maxDescLength;
-    const displayDescription = shouldTruncate
-        ? `${baseDescription.slice(0, maxDescLength).trimEnd()}…`
-        : baseDescription;
+    const maxDescLength = 100; // Shortened for cleaner UI
+    const displayDescription =
+        baseDescription.length > maxDescLength
+            ? `${baseDescription.slice(0, maxDescLength).trimEnd()}…`
+            : baseDescription;
 
     return (
         <article
-            className="service-card relative glass rounded-2xl p-0 border border-slate-200/50 shadow-md overflow-hidden reveal-up flex flex-col"
+            className="service-card group relative rounded-3xl border border-slate-200 bg-white shadow-card hover:shadow-card-hover hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col h-full"
             ref={cardRef}
-            style={{ animationDelay: `${index * 60}ms`, '--delay': `${index * 60}ms` }}
+            style={{ animationDelay: `${index * 60}ms`, "--delay": `${index * 60}ms` }}
             aria-label={service.title}
         >
-            <div className="gradient-accent-line"></div>
-            <div className="p-5 pb-6 flex-1 flex flex-col gap-3 min-h-[240px]">
-                <div className="service-image-placeholder flex items-center justify-center">
-                    <span className="text-2xl opacity-20">🧹</span>
+            <Link
+                to={`/service/${service.id}`}
+                className="flex flex-col h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+                {/* Image Section */}
+                <div className="relative h-48 overflow-hidden bg-slate-100">
+                    <img
+                        src={imageUrl}
+                        alt={service.title}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        loading="lazy"
+                    />
+                    <div className="absolute top-4 right-4">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white/90 backdrop-blur-md text-slate-800 shadow-sm border border-white/20">
+                            {service.category || "General"}
+                        </span>
+                    </div>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-[1.05rem] font-semibold text-[#111827] m-0">{service.title}</h2>
-                    <span className="inline-flex items-center px-[10px] py-[4px] rounded-full text-[0.75rem] font-medium bg-[#eef2ff] text-[#4338ca]">
-                        {service.category || "General"}
-                    </span>
-                </div>
-                <div className="flex items-baseline gap-2">
-                    <div className="text-[1.25rem] font-bold text-[#6366f1] leading-none">{priceLabel}</div>
-                    {avg_rating !== undefined || total_reviews !== undefined ? (
-                        <div className="text-xs text-slate-600 flex items-center gap-1">
-                            <span className="text-amber-500">★</span>
-                            <span className="font-semibold">
-                                {avg_rating != null ? Number(avg_rating).toFixed(1) : "—"}
-                            </span>
-                            <span className="text-slate-500">({total_reviews ?? 0})</span>
+
+                {/* Content Section */}
+                <div className="flex flex-col flex-1 p-6">
+                    <div className="mb-4">
+                        <h2 className="text-xl font-bold text-slate-900 mb-2 leading-tight group-hover:text-primary-start transition-colors">
+                            {service.title}
+                        </h2>
+                        <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">
+                            {displayDescription}
+                        </p>
+                    </div>
+
+                    <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <div className="flex flex-col">
+                            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Starting at</span>
+                            <span className="text-lg font-bold text-slate-900">{priceLabel}</span>
                         </div>
-                    ) : null}
-                </div>
-                <p className="text-[0.9rem] text-[#6b7280] leading-[1.5] flex-1 m-0">
-                    {displayDescription}
-                </p>
 
-                <div className="text-xs text-slate-500" aria-label="Location metadata">
-                    Coordinates not provided
+                        {/* Rating or Verified Badge */}
+                        <div className="flex items-center gap-1.5">
+                            {avg_rating !== undefined || total_reviews !== undefined ? (
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 border border-amber-100">
+                                    <span className="text-amber-500 text-sm">★</span>
+                                    <span className="font-bold text-slate-800 text-sm">
+                                        {avg_rating != null ? Number(avg_rating).toFixed(1) : "—"}
+                                    </span>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                                    <span className="text-xs font-bold">Verified</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
-
-                <footer className="flex gap-2.5 mt-auto pt-2.5">
-                    <Link
-                        to={`/service/${service.id}`}
-                        className={`btn-gradient text-sm px-4 py-2 ${disableActions ? "opacity-60 pointer-events-none" : ""}`}
-                        aria-disabled={disableActions}
-                        tabIndex={disableActions ? -1 : 0}
-                    >
-                        View
-                    </Link>
-                    <button
-                        type="button"
-                        className="btn-ghost text-sm px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={() => onShowMap?.(service)}
-                        disabled={disableActions || !hasCoords}
-                        aria-disabled={disableActions || !hasCoords}
-                    >
-                        Map
-                    </button>
-                </footer>
-            </div>
+            </Link>
         </article>
     );
 }

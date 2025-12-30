@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import List, Dict, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.db.session import SessionLocal
 from app.api.auth import get_password_hash
@@ -21,6 +21,8 @@ from app.models import (
     Service,
     Booking,
     Review,
+    ProviderPayoutSettings,
+    AuditLog
 )
 
 random.seed(42)
@@ -43,50 +45,58 @@ CUSTOMERS = [
 ]
 CUSTOMER_PASSWORD = "user123"
 
+# Banashankari & Nearby Providers (for Geo-Matching Demo)
 PROVIDERS = [
-    ("provider.plumber@helpx.com", "Ramesh Plumbing Works", "Indiranagar"),
-    ("provider.electrician@helpx.com", "Suresh Electricals", "Whitefield"),
-    ("provider.cleaning@helpx.com", "Sparkle Home Cleaning", "Koramangala"),
-    ("provider.ac@helpx.com", "CoolAir AC Services", "Yelahanka"),
-    ("provider.paint@helpx.com", "Perfect Paints", "Marathahalli"),
-    ("provider.carpenter@helpx.com", "WoodCraft Carpentry", "Jayanagar"),
-    ("provider.pest@helpx.com", "SafeShield Pest Control", "BTM Layout"),
-    ("provider.appliance@helpx.com", "QuickFix Appliances", "HSR Layout"),
+    # Banashankari (Center)
+    ("ravi.plumber@helpx.com", "Ravi Plumbing Services", "Banashankari"),
+    ("vikram.electrician@helpx.com", "Vikram Electricals", "Banashankari"),
+    
+    # Jayanagar (North-East - ~4km away)
+    ("suresh.plumber@helpx.com", "Suresh Plumbing Works", "Jayanagar"),
+    ("anita.electrician@helpx.com", "Anita Power Solutions", "Jayanagar"),
+    
+    # JP Nagar (East/South - ~3km away)
+    ("manoj.cleaning@helpx.com", "Manoj Deep Cleaners", "JP Nagar"),
+    ("pooja.ac@helpx.com", "Pooja AC Cool", "JP Nagar"),
+    
+    # Basavanagudi (North - ~3km away)
+    ("kiran.carpenter@helpx.com", "Kiran Wood Art", "Basavanagudi"),
+    ("raj.pest@helpx.com", "Raj Pest Control", "Basavanagudi"),
 ]
 PROVIDER_PASSWORD = "provider123"
 
 PROVIDER_PROFILES: Dict[str, Dict[str, str]] = {
-    "provider.plumber@helpx.com": {
-        "phone": "9876543101",
-        "bio": "12+ years of plumbing experience in apartments and villas across Bangalore.",
+    "ravi.plumber@helpx.com": {
+        "phone": "9876543201",
+        "bio": "Expert plumber in Banashankari. 15 years experience.",
     },
-    "provider.electrician@helpx.com": {
-        "phone": "9876543102",
-        "bio": "Certified electrician handling residential and commercial work.",
+    "vikram.electrician@helpx.com": {
+        "phone": "9876543202",
+        "bio": "Banashankari based electrician. 24/7 service.",
     },
-    "provider.cleaning@helpx.com": {
-        "phone": "9876543103",
-        "bio": "Deep cleaning experts for homes, offices, and move-in cleaning.",
+    "suresh.plumber@helpx.com": {
+        "phone": "9876543211",
+        "bio": "Trusted plumber serving Jayanagar and surrounding areas.",
     },
-    "provider.ac@helpx.com": {
-        "phone": "9876543104",
-        "bio": "AC installation, repair & gas refilling specialist.",
+    "anita.electrician@helpx.com": {
+        "phone": "9876543212",
+        "bio": "Professional electrical services in Jayanagar.",
     },
-    "provider.paint@helpx.com": {
-        "phone": "9876543105",
-        "bio": "Interior painting with dust-free tools and eco-friendly paints.",
+    "manoj.cleaning@helpx.com": {
+        "phone": "9876543213",
+        "bio": "Deep cleaning specialist in JP Nagar.",
     },
-    "provider.carpenter@helpx.com": {
-        "phone": "9876543106",
-        "bio": "Custom furniture fixes, hinges, modular kitchens, and wardrobes.",
+    "pooja.ac@helpx.com": {
+        "phone": "9876543214",
+        "bio": "AC repair and service expert in JP Nagar.",
     },
-    "provider.pest@helpx.com": {
-        "phone": "9876543107",
-        "bio": "Odourless pest control with child-safe treatments.",
+    "kiran.carpenter@helpx.com": {
+        "phone": "9876543215",
+        "bio": "Basavanagudi's finest carpentry services.",
     },
-    "provider.appliance@helpx.com": {
-        "phone": "9876543108",
-        "bio": "Certified technicians for multi-brand appliance repair.",
+    "raj.pest@helpx.com": {
+        "phone": "9876543216",
+        "bio": "Eco-friendly pest control in Basavanagudi.",
     },
 }
 
@@ -104,32 +114,36 @@ GLOBAL_SERVICES = [
 ]
 
 PROVIDER_SERVICE_PLANS: Dict[str, List[Tuple[str, Decimal, Decimal, Decimal]]] = {
-    "provider.plumber@helpx.com": [
-        ("Plumbing", Decimal("499"), Decimal("8"), Decimal("10")),
-        ("Bathroom Deep Cleaning", Decimal("1199"), Decimal("6"), Decimal("8")),
+    # Banashankari
+    "ravi.plumber@helpx.com": [
+        ("Plumbing", Decimal("499"), Decimal("5"), Decimal("15")),
     ],
-    "provider.electrician@helpx.com": [
-        ("Electrical Repair", Decimal("399"), Decimal("10"), Decimal("7")),
+    "vikram.electrician@helpx.com": [
+        ("Electrical Repair", Decimal("399"), Decimal("5"), Decimal("10")),
     ],
-    "provider.cleaning@helpx.com": [
-        ("House Cleaning", Decimal("2499"), Decimal("12"), Decimal("5")),
-        ("Bathroom Deep Cleaning", Decimal("999"), Decimal("10"), Decimal("6")),
+    
+    # Jayanagar (Competition for Plumber & Electrician)
+    "suresh.plumber@helpx.com": [
+        ("Plumbing", Decimal("549"), Decimal("6"), Decimal("12")), # Slightly higher price
     ],
-    "provider.ac@helpx.com": [
-        ("AC Service & Repair", Decimal("599"), Decimal("15"), Decimal("9")),
+    "anita.electrician@helpx.com": [
+        ("Electrical Repair", Decimal("449"), Decimal("6"), Decimal("8")),
     ],
-    "provider.paint@helpx.com": [
-        ("Interior Painting", Decimal("45"), Decimal("12"), Decimal("11")),
+
+    # JP Nagar
+    "manoj.cleaning@helpx.com": [
+        ("House Cleaning", Decimal("1899"), Decimal("7"), Decimal("4")),
     ],
-    "provider.carpenter@helpx.com": [
-        ("Furniture Carpentry", Decimal("699"), Decimal("10"), Decimal("10")),
+    "pooja.ac@helpx.com": [
+        ("AC Service & Repair", Decimal("649"), Decimal("7"), Decimal("6")),
     ],
-    "provider.pest@helpx.com": [
-        ("Pest Control", Decimal("1499"), Decimal("14"), Decimal("8")),
+
+    # Basavanagudi
+    "kiran.carpenter@helpx.com": [
+        ("Furniture Carpentry", Decimal("799"), Decimal("5"), Decimal("15")),
     ],
-    "provider.appliance@helpx.com": [
-        ("Washing Machine Repair", Decimal("499"), Decimal("12"), Decimal("6")),
-        ("Refrigerator Repair", Decimal("549"), Decimal("12"), Decimal("6")),
+    "raj.pest@helpx.com": [
+        ("Pest Control", Decimal("1199"), Decimal("5"), Decimal("10")),
     ],
 }
 
@@ -149,6 +163,42 @@ REVIEW_TEXTS = [
     "Clean work and polite staff.",
     "Will definitely book again.",
 ]
+
+# Coordinates for Geo-Matching Demo
+AREA_COORDINATES = {
+    "Banashankari": (12.9255, 77.5468),    # Center
+    "Jayanagar": (12.9308, 77.5838),       # ~4km East/North
+    "JP Nagar": (12.9063, 77.5857),        # ~3km South-East
+    "Basavanagudi": (12.9406, 77.5683),    # ~2.5km North
+}
+
+
+def clear_existing_data(db: Session):
+    """Clears all existing data to ensure a fresh seed."""
+    print("🧹 Clearing existing data...")
+    try:
+        # Order matters due to foreign keys
+        db.query(AuditLog).delete()
+        db.query(Review).delete()
+        db.query(Booking).delete()
+        db.query(ProviderService).delete()
+        db.query(Service).delete() # Legacy services
+        db.query(ProviderPayoutSettings).delete()
+        db.query(ProviderProfile).delete()
+        db.query(Provider).delete()
+        
+        # We can leave Global Services to avoid shifting IDs if not necessary,
+        # but re-seeding them is also fine.
+        db.query(GlobalService).delete()
+        
+        # Delete non-admin users
+        db.query(User).filter(User.role != "admin").delete()
+        
+        db.commit()
+        print("✅ Existing data cleared.")
+    except Exception as e:
+        print(f"⚠️ Error during clearing (might be empty): {e}")
+        db.rollback()
 
 
 def _get_or_create_user(db: Session, email: str, name: str, password: str, role: str) -> Tuple[User, bool]:
@@ -224,10 +274,17 @@ def _ensure_provider_services_and_legacy_services(
     provider: Provider,
     gs_lookup: Dict[str, GlobalService],
     plans: List[Tuple[str, Decimal, Decimal, Decimal]],
+    lat: float = None,
+    lon: float = None,
 ) -> Tuple[List[ProviderService], List[Service], int]:
     provider_services: List[ProviderService] = []
     legacy_services: List[Service] = []
     created_provider_services = 0
+    
+    # Slight fuzz for location so they aren't all EXACTLY on top of each other
+    base_lat = lat if lat else 12.9255
+    base_lon = lon if lon else 77.5468
+    
     for title, price, radius, exp in plans:
         gs = gs_lookup.get(title)
         if not gs:
@@ -253,22 +310,7 @@ def _ensure_provider_services_and_legacy_services(
             db.commit()
             db.refresh(ps)
             created_provider_services += 1
-        else:
-            updated = False
-            if ps.price != price:
-                ps.price = price
-                updated = True
-            if ps.service_radius_km != radius:
-                ps.service_radius_km = radius
-                updated = True
-            if ps.experience_years != exp:
-                ps.experience_years = exp
-                updated = True
-            if not ps.is_active:
-                ps.is_active = True
-                updated = True
-            if updated:
-                db.commit()
+        
         provider_services.append(ps)
 
         legacy = (
@@ -276,6 +318,7 @@ def _ensure_provider_services_and_legacy_services(
             .filter(Service.provider_id == provider.id, Service.title == title)
             .first()
         )
+        
         if not legacy:
             legacy = Service(
                 provider_id=provider.id,
@@ -286,6 +329,22 @@ def _ensure_provider_services_and_legacy_services(
                 flagged=False,
             )
             db.add(legacy)
+            db.flush() # Flush to get ID
+            
+            # Set Location
+            # Add small random variation to lat/lon for density visual (approx 300-500m jitter)
+            variation = 0.003
+            svc_lat = base_lat + random.uniform(-variation, variation)
+            svc_lon = base_lon + random.uniform(-variation, variation)
+
+            try:
+                db.execute(
+                    text("UPDATE services SET location = ST_SetSRID(ST_MakePoint(:lon, :lat), 4326) WHERE id = :id"),
+                    {"lon": svc_lon, "lat": svc_lat, "id": legacy.id},
+                )
+            except Exception as e:
+                print(f"Warning: Failed to set location for {title}: {e}")
+
             db.commit()
             db.refresh(legacy)
         legacy_services.append(legacy)
@@ -301,6 +360,10 @@ def _ensure_bookings_and_reviews(
     summary: Dict[str, int],
 ) -> None:
     if not provider_services:
+        return
+
+    # Skip creating bookings if no customers
+    if not customers:
         return
 
     demo_bookings = (
@@ -388,10 +451,15 @@ def seed() -> None:
     }
 
     try:
+        # 1. Clear Data
+        clear_existing_data(db)
+
+        # 2. Create Admin
         admin, created = _get_or_create_user(db, ADMIN_USER["email"], ADMIN_USER["name"], ADMIN_USER["password"], "admin")
         summary["users_created"] += int(created)
         summary["users_skipped"] += int(not created)
 
+        # 3. Create Customers
         customers: List[User] = []
         for email, name in CUSTOMERS:
             user, created = _get_or_create_user(db, email, name, CUSTOMER_PASSWORD, "customer")
@@ -401,6 +469,7 @@ def seed() -> None:
             else:
                 summary["users_skipped"] += 1
 
+        # 4. Create Provider Users
         provider_users: Dict[str, User] = {}
         for email, business_name, area in PROVIDERS:
             user, created = _get_or_create_user(db, email, business_name, PROVIDER_PASSWORD, "provider")
@@ -410,9 +479,11 @@ def seed() -> None:
             else:
                 summary["users_skipped"] += 1
 
+        # 5. Create Global Services
         gs_lookup, gs_created = _ensure_global_services(db)
         summary["global_services_created"] = gs_created
 
+        # 6. Create Providers & Services
         for email, business_name, area in PROVIDERS:
             user = provider_users[email]
             bio = PROVIDER_PROFILES[email]["bio"]
@@ -426,8 +497,9 @@ def seed() -> None:
             _ensure_profile(db, provider, business_name, profile_info["phone"], profile_info["bio"])
 
             plans = PROVIDER_SERVICE_PLANS.get(email, [])
+            lat, lon = AREA_COORDINATES.get(area, (12.9255, 77.5468)) 
             provider_services, legacy_services, created_ps = _ensure_provider_services_and_legacy_services(
-                db, provider, gs_lookup, plans
+                db, provider, gs_lookup, plans, lat=lat, lon=lon
             )
             summary["provider_services_created"] += created_ps
 
@@ -441,10 +513,14 @@ def seed() -> None:
         print("Bookings created:", summary["bookings_created"])
         print("Reviews created:", summary["reviews_created"])
         print("Completed at (UTC):", datetime.utcnow().isoformat())
+    except Exception as e:
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
     finally:
         db.close()
 
 
 if __name__ == "__main__":
     seed()
-

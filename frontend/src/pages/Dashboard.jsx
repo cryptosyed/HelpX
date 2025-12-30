@@ -50,6 +50,7 @@ export default function Dashboard() {
   const [serviceActionLoading, setServiceActionLoading] = useState({});
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [stats, setStats] = useState({ earnings: 0, completed: 0, rating: null, reviews: 0 });
 
   useEffect(() => {
     if (authLoading) return;
@@ -72,30 +73,50 @@ export default function Dashboard() {
   async function loadData() {
     setPageLoading(true);
     setError(null);
-    const servicesPromise = API.get("/provider/services")
-      .then((res) => {
-        setProviderServices(res.data || []);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError((prev) => prev ?? "Failed to load services.");
-      });
-
-    const globalPromise = API.get("/services/global")
-      .then((res) => setGlobalServices(res.data || []))
-      .catch((err) => console.error(err));
-
-    const bookingsPromise = API.get("/bookings/provider")
-      .then((res) => {
-        setBookings(res.data || []);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError((prev) => prev ?? "Failed to load bookings.");
-      });
 
     try {
-      await Promise.all([servicesPromise, bookingsPromise, globalPromise]);
+      // 1. Get profile for ID (needed for rating)
+      let providerId = null;
+      try {
+        const profileRes = await API.get("/provider/profile");
+        providerId = profileRes.data?.provider_id;
+      } catch (e) {
+        // quiet fail if profile not found/issues
+        console.warn("Profile fetch issue", e);
+      }
+
+      // 2. Parallel fetch of other data
+      const [servicesRes, globalRes, bookingsRes, ratingRes] = await Promise.all([
+        API.get("/provider/services").catch(e => ({ data: [] })),
+        API.get("/services/global").catch(e => ({ data: [] })),
+        API.get("/bookings/provider").catch(e => ({ e, data: null })),
+        providerId
+          ? API.get(`/provider/providers/${providerId}/rating-summary`).catch(e => ({ data: null }))
+          : Promise.resolve({ data: null })
+      ]);
+
+      if (bookingsRes.e) throw bookingsRes.e;
+
+      setProviderServices(servicesRes.data || []);
+      setGlobalServices(globalRes.data || []);
+
+      const loadedBookings = bookingsRes.data || [];
+      setBookings(loadedBookings);
+
+      // 3. Calc stats
+      const completed = loadedBookings.filter(b => b.status && b.status.toLowerCase() === "completed");
+      const earnings = completed.reduce((sum, b) => sum + (Number(b.price) || 0), 0);
+
+      setStats({
+        earnings,
+        completed: completed.length,
+        rating: ratingRes?.data?.avg_rating || null,
+        reviews: ratingRes?.data?.total_reviews || 0
+      });
+
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load dashboard data.");
     } finally {
       setPageLoading(false);
     }
@@ -205,6 +226,26 @@ export default function Dashboard() {
           </button>
         </div>
       )}
+
+      {/* Stats Overview */}
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <StatsCard label="Total Earnings" value={`₹${stats.earnings.toLocaleString("en-IN")}`} icon="💰" />
+        <StatsCard label="Jobs Completed" value={stats.completed} icon="✅" />
+        <StatsCard label="Active Jobs" value={activeJobs.length} icon="⚡" />
+        <StatsCard label="Rating" value={stats.rating ? `⭐ ${stats.rating}` : "—"} subtext={`${stats.reviews} reviews`} icon="🏆" />
+      </section>
+
+      {/* New Assignments (assigned but pending) */}
+      <TaskSection
+        title="New Assignments"
+        emptyText="No new assignments."
+        bookings={assignedPending}
+        showActions
+        actionLoading={actionLoading}
+        actionErrors={actionErrors}
+        onAccept={(b) => updateBookingStatus(b.id, "accepted")}
+        onReject={(b) => updateBookingStatus(b.id, "rejected")}
+      />
 
       {/* Incoming Requests (unassigned) */}
       <TaskSection
@@ -359,6 +400,9 @@ function BookingCard({ booking, showActions, actionLoading, actionErrors, onAcce
           <strong>Customer:</strong> {userLabel}
         </div>
         <div>
+          <strong>Phone:</strong> {booking.user_phone || "—"}
+        </div>
+        <div>
           <strong>Address:</strong> {location}
         </div>
         <div>
@@ -368,6 +412,25 @@ function BookingCard({ booking, showActions, actionLoading, actionErrors, onAcce
           <strong>Price:</strong> {price}
         </div>
       </div>
+
+      {booking.status === "accepted" && (
+        <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 btn-white text-center flex items-center justify-center gap-2 text-sm"
+          >
+            <span role="img" aria-label="map">📍</span> Navigate
+          </a>
+          <a
+            href={`tel:${booking.user_phone || ""}`}
+            className="flex-1 btn-white text-center flex items-center justify-center gap-2 text-sm"
+          >
+            <span role="img" aria-label="phone">📞</span> {booking.user_phone ? `Call ${booking.user_phone}` : "Call"}
+          </a>
+        </div>
+      )}
       {showActions && (
         <div className="flex flex-col gap-2 mt-4">
           <div className="flex gap-2">
@@ -391,6 +454,19 @@ function BookingCard({ booking, showActions, actionLoading, actionErrors, onAcce
           {actionErrors[booking.id] && <div className="text-xs text-red-600">{actionErrors[booking.id]}</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+function StatsCard({ label, value, icon, subtext }) {
+  return (
+    <div className="glass rounded-xl p-4 border border-slate-200/50 shadow-sm flex flex-col justify-between h-full">
+      <div className="text-2xl mb-2">{icon}</div>
+      <div>
+        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{label}</p>
+        <p className="text-xl font-bold text-slate-800 mt-1">{value}</p>
+        {subtext && <p className="text-xs text-slate-400 mt-1">{subtext}</p>}
+      </div>
     </div>
   );
 }

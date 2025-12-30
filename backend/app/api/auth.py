@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
+import bcrypt
 
 from app import schemas, crud
 from app.api.deps import get_db, get_current_user
@@ -28,13 +29,28 @@ def _truncate_for_bcrypt(password: str) -> str:
     return raw.decode("utf-8", errors="ignore")
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(_truncate_for_bcrypt(password))
+    """Hash password using bcrypt directly to avoid passlib initialization issues"""
+    try:
+        password_bytes = _truncate_for_bcrypt(password).encode("utf-8")
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        return hashed.decode("utf-8")
+    except Exception:
+        # Fallback to passlib if direct bcrypt fails
+        return pwd_context.hash(_truncate_for_bcrypt(password))
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(
-        _truncate_for_bcrypt(plain_password),
-        hashed_password
-    )
+    """Verify password using bcrypt directly to avoid passlib initialization issues"""
+    try:
+        password_bytes = _truncate_for_bcrypt(plain_password).encode("utf-8")
+        hash_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(password_bytes, hash_bytes)
+    except Exception:
+        # Fallback to passlib if direct bcrypt fails
+        return pwd_context.verify(
+            _truncate_for_bcrypt(plain_password),
+            hashed_password
+        )
 
 # -------------------------------------------------------------------
 # AUTH ROUTES

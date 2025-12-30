@@ -37,24 +37,26 @@ a.btn-ghost {
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .glass-strong {
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .card-hover {
-  transition: all 0.3s ease-out;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-hover:hover {
-  transform: translateY(-8px) scale(1.01);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  transform: translateY(-8px) scale(1.005);
+  box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.1), 0 10px 20px -5px rgba(0, 0, 0, 0.04);
 }
 
 .btn-gradient,
@@ -160,6 +162,29 @@ a.btn-gradient:focus * {
   color: #6C63FF !important;
   -webkit-text-fill-color: #6C63FF !important;
   outline: none !important;
+}
+
+.btn-white {
+  background: #ffffff !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
+  font-weight: 600 !important;
+  padding: 0.625rem 1.25rem !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.2s !important;
+  cursor: pointer !important;
+  display: inline-block !important;
+  text-align: center !important;
+  text-decoration: none !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+
+.btn-white:hover {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
 }
 
 /* Services layout safety */

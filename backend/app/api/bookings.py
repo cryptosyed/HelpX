@@ -97,7 +97,7 @@ def validate_booking_transition(current: Optional[str], next_status: Optional[st
         raise HTTPException(status_code=400, detail=f"Invalid status transition: {cur} -> {nxt}")
 
 
-def _ensure_provider_available(db: Session, provider_id: Optional[int], scheduled_at) -> None:
+def _ensure_provider_available(db: Session, provider_id: Optional[int], scheduled_at, exclude_booking_id: Optional[int] = None) -> None:
     """
     Enforce provider availability with row-level locking to avoid double-booking under concurrency.
     Uses a fixed 1-hour window starting at scheduled_at.
@@ -110,7 +110,7 @@ def _ensure_provider_available(db: Session, provider_id: Optional[int], schedule
 
     existing_end = Booking.scheduled_at + text("interval '1 hour'")
 
-    overlap = (
+    query = (
         db.query(Booking)
         .with_for_update()  # locks matching rows to prevent race conditions
         .filter(
@@ -119,8 +119,12 @@ def _ensure_provider_available(db: Session, provider_id: Optional[int], schedule
             Booking.scheduled_at < new_end,
             existing_end > new_start,
         )
-        .first()
     )
+
+    if exclude_booking_id:
+        query = query.filter(Booking.id != exclude_booking_id)
+
+    overlap = query.first()
 
     if overlap:
         logger.info(
@@ -201,6 +205,7 @@ def _booking_to_schema(db: Session, booking: Booking) -> schemas.BookingOut:
         service=api_utils.service_to_schema(db, service) if service else None,
         service_title=(service.title if service else None) or (gservice.title if gservice else None),
         user_name=user.name if user else None,
+        user_phone=user.phone if user else None,
         location=location_str,
     )
 
@@ -499,7 +504,7 @@ def accept_booking(
         raise HTTPException(status_code=400, detail="Only pending bookings can be accepted")
 
     # Lock provider bookings and re-check overlap to avoid race conditions on acceptance
-    _ensure_provider_available(db, current_user.provider.id, booking.scheduled_at)
+    _ensure_provider_available(db, current_user.provider.id, booking.scheduled_at, exclude_booking_id=booking.id)
 
     validate_booking_transition(booking.status, "accepted")
 

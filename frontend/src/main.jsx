@@ -4,12 +4,13 @@ import 'leaflet/dist/leaflet.css';
 
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, NavLink, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useNavigate, Link } from "react-router-dom";
 import Services from "./pages/Services";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ServiceDetail from "./pages/ServiceDetail";
 import CreateService from "./pages/CreateService";
+import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import UserDashboard from "./pages/UserDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -21,7 +22,9 @@ import MatchProviders from "./pages/MatchProviders";
 import CreateBooking from "./pages/CreateBooking";
 import UserBookings from "./pages/UserBookings";
 import ProviderBookings from "./pages/ProviderBookings";
+import Footer from "./components/Footer";
 
+// --- NAV COMPONENT ---
 function Nav() {
   const auth = useAuthContext();
   const navigate = useNavigate();
@@ -37,14 +40,13 @@ function Nav() {
   // Show loading state briefly to avoid flicker (only on initial load)
   if (auth.isLoading && !auth.user) {
     return (
-      <header className="sticky top-0 z-50 glass-strong border-b border-slate-200/50 shadow-sm" role="banner">
+      <header className="sticky top-0 z-50 glass border-b border-white/20 transition-all duration-300" role="banner">
         <div className="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between gap-5 flex-wrap">
           <div>
-            <p className="text-2xl font-bold text-gradient m-0">HelpX</p>
-            <p className="text-xs text-slate-500 m-0 mt-0.5">Local services marketplace MVP</p>
+            <p className="text-2xl font-bold text-gradient m-0 tracking-tight">HelpX</p>
           </div>
           <nav className="flex gap-2 items-center flex-wrap" aria-label="Primary">
-            <div className="px-4 py-2 text-slate-400 text-sm">Loading...</div>
+            <div className="px-4 py-2 text-slate-400 text-sm animate-pulse">Loading...</div>
           </nav>
         </div>
       </header>
@@ -59,39 +61,41 @@ function Nav() {
   ].filter((link) => link.show);
 
   return (
-    <header className="sticky top-0 z-50 glass-strong border-b border-slate-200/50 shadow-sm" role="banner">
+    <header className="sticky top-0 z-50 glass border-b border-white/20 transition-all duration-300" role="banner">
       <div className="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between gap-5 flex-wrap">
-        <div>
-          <p className="text-2xl font-bold text-gradient m-0">HelpX</p>
-          <p className="text-xs text-slate-500 m-0 mt-0.5">Local services marketplace MVP</p>
-        </div>
-        <nav className="flex gap-2 items-center flex-wrap" aria-label="Primary">
+        <Link to="/" className="group">
+          <p className="text-2xl font-bold text-gradient m-0 tracking-tight group-hover:opacity-80 transition-opacity">HelpX</p>
+          <p className="text-[10px] text-slate-500 font-medium tracking-wider uppercase m-0 -mt-1 hidden sm:block">Local Services</p>
+        </Link>
+
+        <nav className="flex gap-3 items-center flex-wrap" aria-label="Primary">
           {links.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
               end={link.end}
               className={({ isActive }) =>
-                `px-4 py-2 h-10 rounded-lg font-medium text-sm transition-colors duration-150
-                border border-slate-200 bg-white text-slate-800 shadow-sm
-                hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-start
-                ${isActive ? "ring-1 ring-primary-start/50" : ""}`
+                `px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                ${isActive
+                  ? "bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`
               }
             >
               {link.label}
             </NavLink>
           ))}
+
+          <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block" />
+
           {isAuthed ? (
             <button
               onClick={() => {
                 auth.logout();
                 navigate("/login", { replace: true });
               }}
-              className="px-4 py-2 h-10 rounded-lg font-medium text-sm transition-colors duration-150
-              border border-slate-200 bg-white text-slate-800 shadow-sm
-              hover:bg-red-50 hover:text-red-600 active:bg-red-100
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-400"
+              className="px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200
+              text-slate-600 hover:bg-red-50 hover:text-red-600 hover:shadow-sm"
             >
               Sign out
             </button>
@@ -99,25 +103,13 @@ function Nav() {
             <>
               <NavLink
                 to="/login"
-                className={({ isActive }) =>
-                  `px-4 py-2 h-10 rounded-lg font-medium text-sm transition-colors duration-150
-                border border-slate-200 bg-white text-slate-800 shadow-sm
-                hover:bg-slate-50 hover:text-slate-900 active:bg-slate-100
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-start
-                ${isActive ? "ring-1 ring-primary-start/50" : ""}`
-                }
+                className="px-5 py-2 rounded-lg font-medium text-sm transition-all duration-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50"
               >
-                Login
+                Log in
               </NavLink>
               <NavLink
                 to="/register"
-                className={({ isActive }) =>
-                  `px-4 py-2 h-10 rounded-lg font-semibold text-sm transition-colors duration-150
-                bg-indigo-600 text-white shadow-sm
-                hover:bg-indigo-500 active:bg-indigo-700
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-400
-                ${isActive ? "ring-2 ring-offset-2 ring-indigo-400" : ""}`
-                }
+                className="btn-gradient px-5 py-2 rounded-lg font-semibold text-sm shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30"
               >
                 Register
               </NavLink>
@@ -140,7 +132,8 @@ function AppContent() {
       <Nav />
       <main className="max-w-7xl mx-auto px-5 py-8 pb-16 w-full">
         <Routes>
-          <Route path="/" element={<Services />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/services" element={<Services />} />
           <Route
             path="/create"
             element={
@@ -228,6 +221,7 @@ function AppContent() {
           />
         </Routes>
       </main>
+      <Footer />
     </div>
   );
 }

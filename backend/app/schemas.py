@@ -31,6 +31,7 @@ class UserOut(BaseModel):
     id: int
     email: str
     name: Optional[str]
+    phone: Optional[str] = None
     role: str
 
     class Config:
@@ -134,6 +135,7 @@ class BookingOut(BaseModel):
     service: Optional[ServiceOut] = None
     service_title: Optional[str] = None
     user_name: Optional[str] = None
+    user_phone: Optional[str] = None
     location: Optional[str] = None
 
     class Config:
@@ -178,6 +180,7 @@ class AddressOut(BaseModel):
 
 class UserProfileUpdate(BaseModel):
     name: Optional[str] = None
+    phone: Optional[str] = None
 
 
 # ========== PROVIDER DASHBOARD SCHEMAS ==========
@@ -222,6 +225,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     name: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class UserListResponse(BaseModel):

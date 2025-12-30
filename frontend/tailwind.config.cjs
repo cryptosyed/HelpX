@@ -77,6 +77,13 @@ module.exports = {
       boxShadow: {
         'glow': '0 0 24px rgba(108, 99, 255, 0.3)',
         'glow-lg': '0 0 40px rgba(108, 99, 255, 0.4)',
+        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+        'card': '0 10px 30px -5px rgba(0, 0, 0, 0.05)',
+        'card-hover': '0 20px 40px -5px rgba(0, 0, 0, 0.1), 0 10px 20px -5px rgba(0, 0, 0, 0.04)',
+      },
+      transitionProperty: {
+        'height': 'height',
+        'spacing': 'margin, padding',
       },
     },
   },

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import API from "../api";
 import PageHeader from "../components/PageHeader";
@@ -33,6 +33,7 @@ export default function UserDashboard() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const hasFetchedRef = useRef(false); // guard against duplicate fetches in StrictMode
 
   // Modals
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -50,9 +51,11 @@ export default function UserDashboard() {
     lat: "",
     lon: "",
   });
-  const [profileForm, setProfileForm] = useState({ name: "" });
+  const [profileForm, setProfileForm] = useState({ name: "", phone: "" });
 
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     loadData();
   }, []);
 
@@ -60,10 +63,7 @@ export default function UserDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const bookingsRes = await API.get("/bookings/user").catch((err) => {
-        console.warn("Bookings load failed", err);
-        return { data: [] };
-      });
+      const bookingsRes = await API.get("/bookings/user");
 
       const now = new Date();
       const bookings = bookingsRes.data || [];
@@ -85,13 +85,21 @@ export default function UserDashboard() {
 
       setUpcomingBookings(upcoming);
       setPastBookings(past);
-      // Addresses/profile endpoints removed; keep state stable
-      setAddresses([]);
-      setProfile(null);
-      setProfileForm({ name: "" });
+      const [profileRes, addressesRes] = await Promise.all([
+        API.get("/user/profile").catch(() => ({ data: {} })),
+        API.get("/user/addresses").catch(() => ({ data: [] })),
+      ]);
+
+      setProfile(profileRes.data);
+      setAddresses(addressesRes.data || []);
+      setProfileForm({
+        name: profileRes.data?.name || "",
+        phone: profileRes.data?.phone || "",
+      });
     } catch (err) {
       console.error(err);
       setError("Failed to load dashboard data");
+      // keep existing bookings if an error occurs after a successful load
     } finally {
       setLoading(false);
     }
@@ -117,17 +125,45 @@ export default function UserDashboard() {
   }
 
   async function createAddress() {
-    // noop: endpoint removed; keep UI stable without throwing
+    try {
+      await API.post("/user/addresses", addressForm);
       setShowAddressModal(false);
+      setAddressForm({
+        label: "",
+        line1: "",
+        line2: "",
+        city: "",
+        pincode: "",
+        lat: "",
+        lon: "",
+      });
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save address");
+    }
   }
 
   async function deleteAddress(id) {
-    // noop for removed endpoint
+    if (!confirm("Delete this address?")) return;
+    try {
+      await API.delete(`/user/addresses/${id}`);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete address");
+    }
   }
 
   async function updateProfile() {
-    // noop for removed endpoint
+    try {
+      await API.put("/user/profile", profileForm);
       setShowProfileModal(false);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update profile");
+    }
   }
 
   if (loading) {
@@ -446,6 +482,19 @@ export default function UserDashboard() {
               onChange={(e) =>
                 setProfileForm({ ...profileForm, name: e.target.value })
               }
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-2 text-slate-700">
+              Phone Number
+            </label>
+            <input
+              className="w-full px-4 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-slate-700 outline-none focus:border-primary-start focus:ring-4 focus:ring-primary-start/10 transition-all"
+              value={profileForm.phone}
+              onChange={(e) =>
+                setProfileForm({ ...profileForm, phone: e.target.value })
+              }
+              placeholder="+91 9988776655"
             />
           </div>
           <div className="flex gap-3 justify-end mt-6">

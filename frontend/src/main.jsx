@@ -16,8 +16,11 @@ import AdminDashboard from "./pages/AdminDashboard";
 import BookingDetail from "./pages/BookingDetail";
 import ProviderProfile from "./pages/ProviderProfile";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { useAuthContext } from "./contexts/AuthContext";
-import { AuthProvider } from "./contexts/AuthContext";
+import { useAuthContext, AuthProvider } from "./context/AuthContext";
+import MatchProviders from "./pages/MatchProviders";
+import CreateBooking from "./pages/CreateBooking";
+import UserBookings from "./pages/UserBookings";
+import ProviderBookings from "./pages/ProviderBookings";
 
 function Nav() {
   const auth = useAuthContext();
@@ -128,13 +131,7 @@ function Nav() {
 
 // --- SINGLE App component (only one) ---
 function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </BrowserRouter>
-  );
+  return <AppContent />;
 }
 
 function AppContent() {
@@ -190,12 +187,44 @@ function AppContent() {
           <Route path="/booking/:bookingId" element={<BookingDetail />} />
           <Route path="/bookings/:bookingId" element={<BookingDetail />} />
           <Route
+            path="/match"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "user", "provider", "admin"]}>
+                <MatchProviders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/book"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "user", "provider", "admin"]}>
+                <CreateBooking />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/bookings"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "user", "provider", "admin"]}>
+                <UserBookings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/provider/bookings"
+            element={
+              <ProtectedRoute allowedRoles={["provider"]}>
+                <ProviderBookings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/dashboard/profile"
-              element={
-                <ProtectedRoute allowedRoles={["provider"]}>
-                  <ProviderProfile />
-                </ProtectedRoute>
-              }
+            element={
+              <ProtectedRoute allowedRoles={["provider"]}>
+                <ProviderProfile />
+              </ProtectedRoute>
+            }
           />
         </Routes>
       </main>
@@ -203,4 +232,12 @@ function AppContent() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <AuthProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </AuthProvider>
+  </React.StrictMode>
+);

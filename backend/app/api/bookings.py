@@ -1,4 +1,5 @@
 from typing import List, Optional
+from datetime import timedelta
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,14 +7,162 @@ from sqlalchemy.orm import Session
 
 from app import schemas
 from app.api import utils as api_utils
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_current_provider, get_db
 from app.models import Booking, Service as ServiceModel, User, GlobalService, ProviderService
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 DEFAULT_RADIUS_KM = 10.0
+
+
+def _log_status_change(booking_id: int, old_status: str, new_status: str, actor_id: int, actor_role: str):
+    logger.info(
+        "booking_status_change booking_id=%s old_status=%s new_status=%s actor_id=%s actor_role=%s",
+        booking_id,
+        old_status,
+        new_status,
+        actor_id,
+        actor_role,
+    )
+
+
+VALID_BOOKING_STATUSES = {
+    "pending",
+    "accepted",
+    "rejected",
+    "cancelled",
+    "completed",
+}
+
+VALID_TRANSITIONS = {
+    "pending": {"accepted", "rejected", "cancelled"},
+    "accepted": {"completed", "cancelled"},
+    "rejected": set(),
+    "completed": set(),
+    "cancelled": set(),
+}
+
+"""
+# CURL EXAMPLES (manual testing)
+
+# Test 1: Overlap conflict (same provider, overlapping times → HTTP 409)
+# Create booking A at 10:00
+# curl -X POST http://127.0.0.1:8000/bookings \
+#   -H "Authorization: Bearer <token>" \
+#   -H "Content-Type: application/json" \
+#   -d '{"global_service_id":1,"provider_id":2,"scheduled_at":"2025-01-01T10:00:00Z","user_lat":12.9,"user_lon":77.6}'
+# Create booking B at 10:30 (overlaps) → expect 409
+# curl -X POST http://127.0.0.1:8000/bookings \
+#   -H "Authorization: Bearer <token>" \
+#   -H "Content-Type: application/json" \
+#   -d '{"global_service_id":1,"provider_id":2,"scheduled_at":"2025-01-01T10:30:00Z","user_lat":12.9,"user_lon":77.6}'
+
+# Test 2: Non-overlap (1h duration, back-to-back allowed)
+# Booking at 10:00 then 11:00 should succeed
+# curl -X POST http://127.0.0.1:8000/bookings \
+#   -H "Authorization: Bearer <token>" \
+#   -H "Content-Type: application/json" \
+#   -d '{"global_service_id":1,"provider_id":2,"scheduled_at":"2025-01-01T10:00:00Z","user_lat":12.9,"user_lon":77.6}'
+# curl -X POST http://127.0.0.1:8000/bookings \
+#   -H "Authorization: Bearer <token>" \
+#   -H "Content-Type: application/json" \
+#   -d '{"global_service_id":1,"provider_id":2,"scheduled_at":"2025-01-01T11:00:00Z","user_lat":12.9,"user_lon":77.6}'
+
+# Test 3: Concurrent accepts (only one should succeed)
+# Terminal 1:
+# curl -X PUT http://127.0.0.1:8000/bookings/123/accept \
+#   -H "Authorization: Bearer <provider_token>"
+# Terminal 2 (run simultaneously):
+# curl -X PUT http://127.0.0.1:8000/bookings/123/accept \
+#   -H "Authorization: Bearer <provider_token>"
+# Expect one 200 and one 409 conflict
+"""
+
+
+def validate_booking_transition(current: Optional[str], next_status: Optional[str]) -> None:
+    cur = (current or "").lower()
+    nxt = (next_status or "").lower()
+
+    # Allow no-op updates
+    if cur == nxt:
+        return
+
+    if cur not in VALID_BOOKING_STATUSES or nxt not in VALID_BOOKING_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status transition")
+
+    allowed = VALID_TRANSITIONS.get(cur, set())
+    if nxt not in allowed:
+        raise HTTPException(status_code=400, detail=f"Invalid status transition: {cur} -> {nxt}")
+
+
+def _ensure_provider_available(db: Session, provider_id: Optional[int], scheduled_at) -> None:
+    """
+    Enforce provider availability with row-level locking to avoid double-booking under concurrency.
+    Uses a fixed 1-hour window starting at scheduled_at.
+    """
+    if not provider_id or not scheduled_at:
+        return
+
+    new_start = scheduled_at
+    new_end = scheduled_at + timedelta(hours=1)
+
+    existing_end = Booking.scheduled_at + text("interval '1 hour'")
+
+    overlap = (
+        db.query(Booking)
+        .with_for_update()  # locks matching rows to prevent race conditions
+        .filter(
+            Booking.provider_id == provider_id,
+            Booking.status.in_(["pending", "accepted"]),
+            Booking.scheduled_at < new_end,
+            existing_end > new_start,
+        )
+        .first()
+    )
+
+    if overlap:
+        logger.info(
+            "booking_conflict provider_id=%s conflicting_booking_id=%s requested_start=%s",
+            provider_id,
+            overlap.id,
+            new_start,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="Provider is not available at the selected time",
+        )
+
+
+def _has_time_conflict(db: Session, provider_id: Optional[int], scheduled_at) -> bool:
+    """
+    Returns True if provider has a pending/accepted booking that overlaps the new window.
+    Overlap rule (1h fixed duration):
+      existing.start < new.end  AND  existing.end > new.start
+    end is derived (scheduled_at + 1 hour) so we avoid persisting duration for now.
+    """
+    if not provider_id or not scheduled_at:
+        return False
+
+    new_start = scheduled_at
+    new_end = scheduled_at + timedelta(hours=1)
+
+    # existing.end is derived on the fly to keep schema stable while duration is fixed
+    existing_end = Booking.scheduled_at + text("interval '1 hour'")
+
+    conflict = (
+        db.query(Booking.id)
+        .filter(
+            Booking.provider_id == provider_id,
+            Booking.status.in_(["pending", "accepted"]),
+            Booking.scheduled_at < new_end,  # existing starts before new ends
+            existing_end > new_start,        # existing ends after new starts
+        )
+        .first()
+    )
+
+    return conflict is not None
 
 
 def _booking_to_schema(db: Session, booking: Booking) -> schemas.BookingOut:
@@ -45,6 +194,9 @@ def _booking_to_schema(db: Session, booking: Booking) -> schemas.BookingOut:
         scheduled_at=booking.scheduled_at,
         notes=booking.notes,
         status=booking.status,
+        cancelled_by=booking.cancelled_by,
+        cancel_reason=booking.cancel_reason,
+        cancelled_at=booking.cancelled_at.isoformat() if booking.cancelled_at else None,
         created_at=booking.created_at.isoformat() if booking.created_at else None,
         service=api_utils.service_to_schema(db, service) if service else None,
         service_title=(service.title if service else None) or (gservice.title if gservice else None),
@@ -89,6 +241,8 @@ def create_booking(
                 status_code=400,
                 detail="Selected provider does not own the requested service",
             )
+
+        _ensure_provider_available(db, provider_id, payload.scheduled_at)
 
         booking = Booking(
             service_id=svc.id,
@@ -172,6 +326,9 @@ def create_booking(
         )
         if not ps:
             raise HTTPException(status_code=400, detail="Provider not offering this service")
+
+    if provider_id:
+        _ensure_provider_available(db, provider_id, payload.scheduled_at)
 
     booking = Booking(
         service_id=None,
@@ -299,15 +456,17 @@ def update_booking_status(
     if booking.provider_id != current_user.provider.id:
         raise HTTPException(status_code=403, detail="Only provider can update status")
 
+    old_status = booking.status
     booking.status = payload.status
     db.add(booking)
     db.commit()
     db.refresh(booking)
-    logger.info(
-        "booking_status_updated booking_id=%s provider_id=%s status=%s",
-        booking.id,
-        current_user.provider.id,
-        booking.status,
+    _log_status_change(
+        booking_id=booking.id,
+        old_status=old_status,
+        new_status=booking.status,
+        actor_id=current_user.id,
+        actor_role="provider",
     )
     _audit(
         db,
@@ -320,9 +479,151 @@ def update_booking_status(
     return _booking_to_schema(db, booking)
 
 
+@router.put("/{booking_id}/accept", response_model=schemas.BookingOut)
+def accept_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_provider),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if not current_user.provider:
+        raise HTTPException(status_code=403, detail="Provider profile required")
+
+    if booking.provider_id != current_user.provider.id:
+        raise HTTPException(status_code=403, detail="Only the assigned provider can accept this booking")
+
+    if booking.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending bookings can be accepted")
+
+    # Lock provider bookings and re-check overlap to avoid race conditions on acceptance
+    _ensure_provider_available(db, current_user.provider.id, booking.scheduled_at)
+
+    validate_booking_transition(booking.status, "accepted")
+
+    old_status = booking.status
+    booking.status = "accepted"
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
+
+    _log_status_change(
+        booking_id=booking.id,
+        old_status=old_status,
+        new_status=booking.status,
+        actor_id=current_user.id,
+        actor_role="provider",
+    )
+    _audit(
+        db,
+        actor_id=current_user.id,
+        action="booking_accepted",
+        target_type="booking",
+        target_id=booking.id,
+        metadata={"status": booking.status},
+    )
+
+    return _booking_to_schema(db, booking)
+
+
+@router.put("/{booking_id}/reject", response_model=schemas.BookingOut)
+def reject_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_provider),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if not current_user.provider:
+        raise HTTPException(status_code=403, detail="Provider profile required")
+
+    if booking.provider_id != current_user.provider.id:
+        raise HTTPException(status_code=403, detail="Only the assigned provider can reject this booking")
+
+    if booking.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending bookings can be rejected")
+
+    validate_booking_transition(booking.status, "rejected")
+
+    old_status = booking.status
+    booking.status = "rejected"
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
+
+    _log_status_change(
+        booking_id=booking.id,
+        old_status=old_status,
+        new_status=booking.status,
+        actor_id=current_user.id,
+        actor_role="provider",
+    )
+    _audit(
+        db,
+        actor_id=current_user.id,
+        action="booking_rejected",
+        target_type="booking",
+        target_id=booking.id,
+        metadata={"status": booking.status},
+    )
+
+    return _booking_to_schema(db, booking)
+
+
+@router.put("/{booking_id}/complete", response_model=schemas.BookingOut)
+def complete_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_provider),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if not current_user.provider:
+        raise HTTPException(status_code=403, detail="Provider profile required")
+
+    if booking.provider_id != current_user.provider.id:
+        raise HTTPException(status_code=403, detail="Only the assigned provider can complete this booking")
+
+    if booking.status != "accepted":
+        raise HTTPException(status_code=400, detail="Only accepted bookings can be completed")
+
+    validate_booking_transition(booking.status, "completed")
+
+    old_status = booking.status
+    booking.status = "completed"
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
+
+    _log_status_change(
+        booking_id=booking.id,
+        old_status=old_status,
+        new_status=booking.status,
+        actor_id=current_user.id,
+        actor_role="provider",
+    )
+    _audit(
+        db,
+        actor_id=current_user.id,
+        action="booking_completed",
+        target_type="booking",
+        target_id=booking.id,
+        metadata={"status": booking.status},
+    )
+
+    return _booking_to_schema(db, booking)
+
+
 @router.put("/{booking_id}/cancel", response_model=schemas.BookingOut)
 def cancel_booking(
     booking_id: int,
+    payload: schemas.BookingCancelRequest | None = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -334,22 +635,96 @@ def cancel_booking(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    if booking.status not in {"pending", "accepted"}:
+    if booking.status != "pending":
         raise HTTPException(
-            status_code=400, detail="Only pending or accepted bookings can be cancelled"
+            status_code=400, detail="Only pending bookings can be cancelled by user"
         )
 
+    validate_booking_transition(booking.status, "cancelled")
+
+    old_status = booking.status
     booking.status = "cancelled"
+    booking.cancelled_by = "user"
+    booking.cancel_reason = (payload.reason if payload else None) or None
+    booking.cancelled_at = func.now()
     db.commit()
     db.refresh(booking)
+    _log_status_change(
+        booking_id=booking.id,
+        old_status=old_status,
+        new_status=booking.status,
+        actor_id=current_user.id,
+        actor_role="user",
+    )
     _audit(
         db,
         actor_id=current_user.id,
         action="booking_cancelled",
         target_type="booking",
         target_id=booking.id,
-        metadata={"status": booking.status},
+        metadata={
+            "status": booking.status,
+            "cancelled_by": booking.cancelled_by,
+            "cancel_reason": booking.cancel_reason,
+        },
     )
+    return _booking_to_schema(db, booking)
+
+
+@router.put("/{booking_id}/cancel/provider", response_model=schemas.BookingOut)
+def cancel_booking_provider(
+    booking_id: int,
+    payload: schemas.BookingCancelRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_provider),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if not current_user.provider:
+        raise HTTPException(status_code=403, detail="Provider profile required")
+
+    if booking.provider_id != current_user.provider.id:
+        raise HTTPException(
+            status_code=403, detail="Only the assigned provider can cancel this booking"
+        )
+
+    if booking.status != "accepted":
+        raise HTTPException(
+            status_code=400, detail="Only accepted bookings can be cancelled by provider"
+        )
+
+    validate_booking_transition(booking.status, "cancelled")
+
+    old_status = booking.status
+    booking.status = "cancelled"
+    booking.cancelled_by = "provider"
+    booking.cancel_reason = (payload.reason if payload else None) or None
+    booking.cancelled_at = func.now()
+    db.commit()
+    db.refresh(booking)
+
+    _log_status_change(
+        booking_id=booking.id,
+        old_status=old_status,
+        new_status=booking.status,
+        actor_id=current_user.id,
+        actor_role="provider",
+    )
+    _audit(
+        db,
+        actor_id=current_user.id,
+        action="booking_cancelled_by_provider",
+        target_type="booking",
+        target_id=booking.id,
+        metadata={
+            "status": booking.status,
+            "cancelled_by": booking.cancelled_by,
+            "cancel_reason": booking.cancel_reason,
+        },
+    )
+
     return _booking_to_schema(db, booking)
 
 

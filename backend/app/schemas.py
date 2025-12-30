@@ -126,6 +126,9 @@ class BookingOut(BaseModel):
     scheduled_at: datetime
     notes: Optional[str] = None
     status: str
+    cancelled_by: Optional[str] = None
+    cancel_reason: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
     created_at: Optional[str] = None
 
     service: Optional[ServiceOut] = None
@@ -139,6 +142,10 @@ class BookingOut(BaseModel):
 
 class BookingStatusUpdate(BaseModel):
     status: str
+
+
+class BookingCancelRequest(BaseModel):
+    reason: Optional[str] = None
 
 
 # ========== USER DASHBOARD SCHEMAS ==========

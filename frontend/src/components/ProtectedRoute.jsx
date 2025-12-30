@@ -1,41 +1,27 @@
 import { Navigate } from "react-router-dom";
-import { useAuthContext } from "../contexts/AuthContext";
+import { useAuthContext } from "../context/AuthContext";
 
-/**
- * Generic route guard.
- * - Redirects to /login if not authenticated
- * - Redirects to / if role is not permitted
- */
-export function ProtectedRoute({ children, allowedRoles = [], requireAdmin = false }) {
+export function ProtectedRoute({ children, allowedRoles }) {
   const auth = useAuthContext();
-  const normalizeRole = (role) => {
-    const r = (role || "").toLowerCase();
-    return r === "customer" ? "user" : r;
-  };
-  const currentRole = normalizeRole(auth.role);
-  const allowedNormalized = allowedRoles.map((r) => normalizeRole(r));
 
+  // Still restoring token from localStorage
   if (auth.isLoading) {
-    return (
-      <div className="glass rounded-xl p-6 text-center text-slate-600">
-        Loading...
-      </div>
-    );
+    return null;
   }
 
-  const user = auth.user;
-
-  if (!user || !auth.isAuthenticated) {
+  // Not logged in
+  if (!auth.isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  if (requireAdmin && currentRole !== "admin") {
-    return <Navigate to="/login" replace />;
+  // Role-based protection
+  if (allowedRoles && allowedRoles.length > 0) {
+    const role = auth.role?.toLowerCase();
+
+    if (!role || !allowedRoles.map(r => r.toLowerCase()).includes(role)) {
+      return <Navigate to="/" replace />;
+    }
   }
 
-  if (!requireAdmin && allowedRoles.length > 0 && !allowedNormalized.includes(currentRole)) {
-    return <Navigate to="/" replace />;
-  }
-
-  return children;
+  return <>{children}</>;
 }

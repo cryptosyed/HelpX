@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import API from "../api";
-import { useAuthContext } from "../contexts/AuthContext";
+import { useAuthContext } from "../context/AuthContext";
 import { showToast } from "../utils/toast";
 
 export default function CreateService() {
@@ -27,12 +27,12 @@ export default function CreateService() {
       return;
     }
 
-    if (!auth.isProvider) {
+    if ((auth.role || "").toLowerCase() !== "provider") {
       showToast("Only providers can offer services.", "error");
       navigate("/");
       return;
     }
-  }, [auth.isLoading, auth.isAuthenticated, auth.isProvider, navigate]);
+  }, [auth.isLoading, auth.isAuthenticated, auth.role, navigate]);
 
   useEffect(() => {
     let active = true;

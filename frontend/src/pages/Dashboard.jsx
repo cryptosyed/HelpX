@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "../api";
 import PageHeader from "../components/PageHeader";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../context/AuthContext";
 import { showToast } from "../utils/toast";
 // import { loadProviderProfile } from "./ProviderProfile";
 
@@ -35,7 +35,7 @@ const renderStatusBadge = (status) => {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, role, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { user, role, isLoading: authLoading, isAuthenticated } = useAuthContext();
   const normalizedRole = (role || user?.role || "").toLowerCase();
   const isProvider = normalizedRole === "provider";
   const isAdmin = normalizedRole === "admin";

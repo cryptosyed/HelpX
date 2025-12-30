@@ -5,7 +5,7 @@ import ServiceCard from "../components/ServiceCard";
 import Pagination from "../components/Pagination";
 import MapModal from "../components/MapModal";
 import Hero from "../components/Hero";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../context/AuthContext";
 
 const PAGE_SIZE = 6;
 const CATEGORY_OPTIONS = [
@@ -17,7 +17,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function Services() {
-  const { user, role } = useAuth();
+  const { user, role } = useAuthContext();
   const normalizedRole = (role || user?.role || "").toLowerCase();
   const isProvider = normalizedRole === "provider";
   const [services, setServices] = useState([]);

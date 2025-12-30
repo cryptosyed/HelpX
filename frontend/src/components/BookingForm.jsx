@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
-import { useAuthContext } from "../contexts/AuthContext";
+import { useAuthContext } from "../context/AuthContext";
 import MapPickerModal from "./MapPickerModal";
 
 export default function BookingForm({ service, serviceId, onCreated }) {

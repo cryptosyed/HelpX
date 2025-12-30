@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import API from "../api";
 import PageHeader from "../components/PageHeader";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../context/AuthContext";
 import { showToast } from "../utils/toast";
 
 export default function ProviderProfile() {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const [form, setForm] = useState({
     businessName: "",
     phone: "",
